@@ -124,7 +124,7 @@ const httpServer = createServer(app);
 
 // Initialize Socket.IO server
 const allowedOrigins = [
-  "https://jasaverse.onrender.com",
+ "https://jasaverse.up.railway.app",
   "https://expo.dev",
 ];
 
