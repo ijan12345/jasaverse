@@ -123,13 +123,19 @@ app.use((err, req, res, next) => {
 const httpServer = createServer(app);
 
 // Initialize Socket.IO server
+const allowedOrigins = [
+  "https://jasaverse.onrender.com",
+  "https://expo.dev",
+];
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
+
 const io = new Server(httpServer, {
   cors: {
-    origin: [
-      "http://192.168.18.126:19000",
-      "http://localhost:5173",
-       "https://5d65-202-46-68-35.ngrok-free.app",
-    ],
+    origin: allowedOrigins,
     credentials: true,
   },
 });
@@ -153,11 +159,9 @@ io.on("connection", (socket) => {
 // Start the server
 connect().then(() => {
   const PORT = process.env.PORT || 8800;
-httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`Backend server is running on port ${PORT}`);
-});
-
-    console.log("Backend server is running on port 8800!");
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Backend server is running on port ${PORT}`);
   });
+});
 
 
