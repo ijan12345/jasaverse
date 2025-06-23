@@ -24,7 +24,6 @@ import { createServer } from "http";         // <-- import http server
 import { Server } from "socket.io";          // <-- import socket.io
 import dotenv from 'dotenv';
 
-dotenv.config();
 
 
 
