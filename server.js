@@ -22,6 +22,9 @@ import { fileURLToPath } from "url";
 import sellerRoutes from "./routes/seller.route.js";
 import { createServer } from "http";         // <-- import http server
 import { Server } from "socket.io";          // <-- import socket.io
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 
 
@@ -126,6 +129,7 @@ const httpServer = createServer(app);
 const allowedOrigins = [
  "https://jasaverse.up.railway.app",
   "https://expo.dev",
+"https://5d65-202-46-68-35.ngrok-free.app"
 ];
 
 app.use(cors({
