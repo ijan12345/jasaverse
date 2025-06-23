@@ -58,6 +58,7 @@ const connect = async () => {
 // Middlewares 
 app.use(cors({ 
   origin: [ "http://192.168.18.126:19000", // Your frontend address
+    "https://5d65-202-46-68-35.ngrok-free.app",
   "http://localhost:5173"       // untuk Expo React Native
   ],
   credentials: true,               // Allow credentials like cookies
