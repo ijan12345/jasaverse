@@ -68,6 +68,10 @@ const OrderSchema = new Schema(
   required: true,
   default: 0,
 },
+isWithdrawn: {
+  type: Boolean,
+  default: false,
+},
     payment_intent: {
       type: String,
       required: true,

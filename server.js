@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import userRoute from "./routes/user.route.js";
 import gigRoute from "./routes/gig.route.js";
+import { handleXenditWebhook } from "./controllers/withdrawal.controller.js";
 import orderRoute from "./routes/order.route.js";
 import conversationRoute from "./routes/conversation.route.js";
 import messageRoute from "./routes/message.route.js";
@@ -69,6 +70,13 @@ app.use(cookieParser());            // Parse cookies
 
 
 // Routes
+app.use("/api/webhook/xendit", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
+app.post("/api/webhook/xendit", handleXenditWebhook);
 app.use("/api/midtrans", midtransRoute);
 app.use("/api/admin", adminRoute);
 app.use("/api/auth", authRoute);

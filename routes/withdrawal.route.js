@@ -6,11 +6,13 @@ import {
   getMyWithdrawals,
   getAllWithdrawals,
   updateWithdrawalStatus,
+  handleXenditWebhook,
 } from "../controllers/withdrawal.controller.js";
 
 const router = express.Router();
 
 router.post("/", verifyToken, requestWithdrawal);
+router.post("/xendit", handleXenditWebhook);
 router.post("/admin", verifyToken, verifyAdmin, requestWithdrawal);
 router.get("/my", verifyToken, getMyWithdrawals);
 router.get("/", verifyToken, verifyAdmin, getAllWithdrawals);
