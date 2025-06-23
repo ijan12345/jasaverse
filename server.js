@@ -22,7 +22,7 @@ import { fileURLToPath } from "url";
 import sellerRoutes from "./routes/seller.route.js";
 import { createServer } from "http";         // <-- import http server
 import { Server } from "socket.io";          // <-- import socket.io
-import dotenv from 'dotenv';
+
 
 
 
