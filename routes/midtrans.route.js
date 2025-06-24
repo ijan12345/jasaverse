@@ -4,7 +4,8 @@ import Order from "../models/order.model.js";
 const router = express.Router();
 
 // Endpoint untuk mengambil total earnings dari semua order milik seller
-router.get("/earnings/:id", async (req, res) => {
+router.get("/:id", async (req, res) => {
+  console.log("🔥 HIT /api/earnings/", req.params.id);
   const { id } = req.params;
 
   try {

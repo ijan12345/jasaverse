@@ -6,7 +6,6 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import {
   requestBankPayout,
-  requestEwalletPayout,
 } from "../services/xendit.services.js";
 
 dotenv.config();

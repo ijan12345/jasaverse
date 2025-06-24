@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
@@ -10,7 +11,6 @@ import messageRoute from "./routes/message.route.js";
 import withdrawalRoute from "./routes/withdrawal.route.js"; // <--- Tambahkan ini
 import reviewRoute from "./routes/review.route.js";
 import authRoute from "./routes/auth.route.js";
-import tripayWebhookRoute from "./routes/tripayWebhook.route.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 //import Stripe from "stripe";
@@ -18,7 +18,7 @@ import midtransRoute from "./routes/midtrans.route.js";
 import adminRoute from "./routes/admin.route.js";
 import path from "path";
 import uploadRoutes from "./routes/upload.routes.js";
-import Order from "./models/order.model.js";
+
 import { fileURLToPath } from "url";
 import sellerRoutes from "./routes/seller.route.js";
 import { createServer } from "http";         // <-- import http server
@@ -46,7 +46,7 @@ mongoose.set("strictQuery", true);
 const connect = async () => {
   try {
     await mongoose.connect(process.env.MONGO);
-    console.log("Connected to MongoDB!");
+     console.log(chalk.white.bgBlue.bold("✅ Connected to MongoDB!"));
   } catch (error) {
     console.error("MongoDB connection error:", error);
     process.exit(1); // Exit the process if DB connection fails
@@ -59,7 +59,7 @@ const connect = async () => {
 // Middlewares 
 app.use(cors({ 
   origin: [ "http://192.168.18.126:19000", // Your frontend address
-    "https://5d65-202-46-68-35.ngrok-free.app",
+    "https://ce6f-202-46-68-35.ngrok-free.app",
   "http://localhost:5173"       // untuk Expo React Native
   ],
   credentials: true,               // Allow credentials like cookies
@@ -77,7 +77,7 @@ app.use("/api/webhook/xendit", (req, res, next) => {
   next();
 });
 app.post("/api/webhook/xendit", handleXenditWebhook);
-app.use("/api/midtrans", midtransRoute);
+app.use("/api/earnings", midtransRoute);
 app.use("/api/admin", adminRoute);
 app.use("/api/auth", authRoute);
 app.use("/api/users", userRoute);
@@ -86,35 +86,11 @@ app.use("/api/withdrawals", withdrawalRoute); // <--- Route endpoint untuk penar
 app.use("/api/sellers", sellerRoutes);
 app.use("/api/gigs", gigRoute);
 app.use("/api/orders", orderRoute);
-app.use("/api/tripay", tripayWebhookRoute);
 app.use("/api/conversations", conversationRoute);
 app.use("/api/messages", messageRoute);
 app.use("/api/reviews", reviewRoute);
 app.use("/api/uploads/", express.static(path.join(__dirname, "uploads")));
 
-
-
-
-app.get("/api/midtrans/earnings/:id", async (req, res) => {
-  const { id } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ error: "ID seller tidak valid" });
-  }
-
-  try {
-    const allOrders = await Order.find({ sellerId: id });
-    const totalEarnings = allOrders.reduce((sum, order) => sum + order.price, 0);
-
-    res.status(200).json({
-      userId: id,
-      earnings: totalEarnings,
-    });
-  } catch (error) {
-    console.error("Gagal ambil dana ditahan dari Order:", error);
-    res.status(500).json({ error: "Gagal ambil dana ditahan dari Order" });
-  }
-});
 
 
 // Error handling middleware
@@ -135,9 +111,7 @@ const httpServer = createServer(app);
 
 // Initialize Socket.IO server
 const allowedOrigins = [
- "https://jasaverse.up.railway.app",
-  "https://expo.dev",
-"https://5d65-202-46-68-35.ngrok-free.app"
+  "https://ce6f-202-46-68-35.ngrok-free.app"
 ];
 
 app.use(cors({
@@ -172,7 +146,7 @@ io.on("connection", (socket) => {
 connect().then(() => {
   const PORT = process.env.PORT || 8800;
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ Backend server is running on port ${PORT}`);
+    console.log(chalk.white.bgBlue.bold(`✅ Backend server is running on port ${PORT}`));
   });
 });
 

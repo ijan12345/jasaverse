@@ -260,15 +260,21 @@ export const getOrderReceipt = async (req, res) => {
  */
 export const getEarnings = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) return next(createError(400, "Format User ID tidak valid"));
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return next(createError(400, "Format User ID tidak valid"));
+    }
 
     const earnings = await Order.aggregate([
-      { $match: { sellerId: new mongoose.Types.ObjectId(id), status: "completed" } },
+      { $match: { sellerId: new mongoose.Types.ObjectId(userId), status: "completed" } },
       { $group: { _id: null, totalEarnings: { $sum: "$price" } } }
     ]);
 
-    res.status(200).json({ userId: id, earnings: earnings[0]?.totalEarnings || 0 });
+    res.status(200).json({
+      userId,
+      earnings: earnings[0]?.totalEarnings || 0
+    });
   } catch (err) {
     next(err);
   }

@@ -77,12 +77,11 @@ const userSchema = new Schema(
       type: Number,
       default: 0, // Default score 0 saat user pertama kali mendaftar
       min: 0, // Batas minimum score agar tidak negatif
-    },  
-    balance: {
+    },    
+    totalPurchases: {
   type: Number,
   default: 0,
 },
-  
 emailVerified: {
   type: Boolean,
   default: false,
