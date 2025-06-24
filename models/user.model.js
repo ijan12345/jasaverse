@@ -22,11 +22,6 @@ const userSchema = new Schema(
       required: false, // Gambar pengirim bisa kosong
     },
     imgPublicId: { type: String },
-    buyerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Buyer", // Bisa dihapus jika tidak ada model Buyer
-      required: false,
-    },
     role: {
       type: String,
       enum: ["buyer", "seller", "admin"], // Menentukan peran pengguna
@@ -51,11 +46,6 @@ const userSchema = new Schema(
     isSeller: {
       type: Boolean,
       default: false,
-    },
-    sellerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Seller",
-      required: false, // Hanya ada jika user benar-benar seorang seller
     },
     cvImage: {
       type: String, // URL atau path untuk file CV yang diunggah
@@ -86,6 +76,12 @@ emailVerified: {
   type: Boolean,
   default: false,
 },
+balance: {
+  type: Number,
+  default: 0, // Default saldo 0 saat user baru dibuat
+  min: 0, // Tidak boleh negatif
+},
+
 
     createdAt: { 
       type: Date, 

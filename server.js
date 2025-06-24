@@ -77,7 +77,7 @@ app.use("/api/webhook/xendit", (req, res, next) => {
   next();
 });
 app.post("/api/webhook/xendit", handleXenditWebhook);
-app.use("/api/earnings", midtransRoute);
+app.use("/api/midtrans", midtransRoute);
 app.use("/api/admin", adminRoute);
 app.use("/api/auth", authRoute);
 app.use("/api/users", userRoute);

@@ -47,13 +47,22 @@ export const handleXenditWebhook = async (req, res) => {
       return res.status(404).send("Withdrawal not found");
     }
 
-    if (status === "completed") {
-      withdrawal.status = "success";
-    } else if (status === "failed") {
-      withdrawal.status = "failed";
-    }
+  if (status === "completed") {
+  withdrawal.status = "success";
 
-    await withdrawal.save();
+  // KURANGI SALDO USER / ADMIN
+  const targetUser = await User.findById(withdrawal.userId);
+  if (targetUser) {
+    const newBalance = (targetUser.balance || 0) - withdrawal.amount;
+    targetUser.balance = newBalance < 0 ? 0 : newBalance;
+    await targetUser.save();
+    console.log(`💸 Balance ${targetUser.username} dikurangi: ${withdrawal.amount}`);
+  }
+}
+
+
+await withdrawal.save();
+
 
     res.status(200).send("✅ Webhook diterima dan status diperbarui");
   } catch (err) {
@@ -194,6 +203,20 @@ export const updateWithdrawalStatus = async (req, res, next) => {
       message: "✅ Status penarikan diperbarui",
       withdrawal: updated,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getAdminWithdrawals = async (req, res, next) => {
+  try {
+    const withdrawals = await Withdrawal.find({
+      sellerId: "admin"
+    })
+      .populate("userId", "username email")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(withdrawals);
   } catch (err) {
     next(err);
   }

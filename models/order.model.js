@@ -33,6 +33,10 @@ const OrderSchema = new Schema(
       required: true,
       trim: true,
     },
+    isBalanceUpdated: {
+  type: Boolean,
+  default: false,
+},
     price: {
       type: Number,
       required: true,

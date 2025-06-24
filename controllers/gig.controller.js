@@ -20,16 +20,11 @@ export const createGig = async (req, res, next) => {
 
     const { cover } = req.body;
 
-    // Jika ada cover, buat thumbnail dengan resolusi lebih kecil (200x200)
-    const coverThumbnail = cover
-      ? cover.replace("/upload/", "/upload/w_200,h_200,c_fill/")
-      : null;
+   const newGig = new Gig({
+  ...req.body,
+  userId: new mongoose.Types.ObjectId(req.userId), // ✅ pastikan ObjectId
+});
 
-    const newGig = new Gig({
-      userId: req.userId,
-      ...req.body,
-      coverThumbnail
-    });
 
     const savedGig = await newGig.save();
     res.status(201).json(savedGig);

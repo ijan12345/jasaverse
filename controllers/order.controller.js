@@ -103,99 +103,118 @@ export const handleMidtransWebhook = async (req, res) => {
 
     console.log("📩 Webhook diterima:", order_id, transaction_status);
 
-    if (["settlement", "capture"].includes(transaction_status)) {
-      let transaction;
-      try {
-        transaction = await midtrans.transaction.status(order_id);
-        console.log("📦 Data transaksi dari Midtrans:\n", JSON.stringify(transaction, null, 2));
-      } catch (err) {
-        console.error("❌ Gagal ambil status Midtrans:", err.message);
-        return res.status(500).json({ message: "Gagal ambil status dari Midtrans" });
-      }
-
-      const gigId = transaction.item_details?.[0]?.id || transaction.custom_field1;
-      const email = transaction.customer_details?.email;
-      const address = transaction.customer_details?.billing_address?.address || "";
-      const name = transaction.customer_details?.first_name || "User";
-      const buyerIdFromMidtrans = transaction.custom_field2;
-
-      if (!gigId) {
-        console.error("❌ gigId tidak ditemukan");
-        return res.status(400).json({ message: "gigId tidak ditemukan" });
-      }
-
-      const gig = await Gig.findById(gigId);
-      if (!gig) {
-        console.error(`❌ Gig ${gigId} tidak ditemukan`);
-        return res.status(404).json({ message: "Gig tidak ditemukan" });
-      }
-
-      let user = await User.findOne({ email });
-      if (!user && email) {
-        try {
-          user = await User.create({
-            email,
-            username: name || email.split("@")[0],
-            img: "",
-            country: "ID",
-            isSeller: false,
-          });
-          console.log(`👤 User baru dibuat: ${user.username}`);
-        } catch (err) {
-          console.error("❌ Gagal membuat user:", err.message);
-        }
-      }
-
-      const buyerId = user?._id || buyerIdFromMidtrans || null;
-      let order = await Order.findOne({ midtransOrderId: order_id });
-
-      if (!order) {
-        // 🔰 Buat order dengan status PENDING dulu
-        try {
-          order = await Order.create({
-            gigId,
-            title: gig.title,
-            img: gig.cover,
-            price: gig.price,
-            sellerId: gig.userId,
-            buyerId: buyerId,
-            status: "pending", // ⬅️ STATUS AWAL: PENDING
-            payment_intent: order_id,
-            midtransToken: transaction.token,
-            midtransOrderId: order_id,
-            customerEmail: email,
-            customerAddress: address,
-            customerName: name || email?.split("@")[0] || "Pengguna",
-            adminFee: Math.round(gig.price * 0.02 * 100) / 100,
-          });
-
-          console.log(`✅ Order ${order_id} dibuat dengan status pending`);
-        } catch (err) {
-          console.error("❌ Gagal membuat order:", err.message);
-          return res.status(500).json({ message: "Gagal membuat order" });
-        }
-      } else if (order.status === "pending") {
-        // 🔄 Ubah status ke completed dan TAHAN: sales ditambah di sini SAJA
-        order.status = "completed";
-        order.buyerId = order.buyerId || buyerId;
-        order.customerName = name;
-        order.adminFee = Math.round(order.price * 0.02 * 100) / 100;
-        await order.save();
-
-        await Gig.findByIdAndUpdate(gigId, { $inc: { sales: 1 } });
-        console.log(`📈 Order ${order_id} diubah jadi completed & sales gig ${gigId} ditambah`);
-      } else if (order.status === "completed") {
-        console.log(`ℹ️ Order ${order_id} sudah completed sebelumnya`);
-      }
-
-      return res.status(200).json({
-        message: "Order berhasil diproses",
-        buyerId,
-      });
+    if (!["settlement", "capture"].includes(transaction_status)) {
+      console.log(`ℹ️ Status transaksi: ${transaction_status} (tidak diproses)`);
+      return res.status(200).json({ message: "Transaksi bukan settlement/capture, tidak diproses" });
     }
 
-    console.log(`ℹ️ Status transaksi: ${transaction_status} (tidak diproses)`);
-    return res.status(200).json({ message: "Transaksi bukan settlement/capture, tidak diproses" });
+    let transaction;
+    try {
+      transaction = await midtrans.transaction.status(order_id);
+      console.log("📦 Data transaksi dari Midtrans:\n", JSON.stringify(transaction, null, 2));
+    } catch (err) {
+      console.error("❌ Gagal ambil status Midtrans:", err.message);
+      return res.status(500).json({ message: "Gagal ambil status dari Midtrans" });
+    }
+
+    const gigId = transaction.item_details?.[0]?.id || transaction.custom_field1;
+    const email = transaction.customer_details?.email;
+    const address = transaction.customer_details?.billing_address?.address || "";
+    const name = transaction.customer_details?.first_name || "User";
+    const buyerIdFromMidtrans = transaction.custom_field2;
+
+    if (!gigId) {
+      console.error("❌ gigId tidak ditemukan");
+      return res.status(400).json({ message: "gigId tidak ditemukan" });
+    }
+
+    const gig = await Gig.findById(gigId);
+    if (!gig) {
+      console.error(`❌ Gig ${gigId} tidak ditemukan`);
+      return res.status(404).json({ message: "Gig tidak ditemukan" });
+    }
+
+    let user = await User.findOne({ email });
+    if (!user && email) {
+      try {
+        user = await User.create({
+          email,
+          username: name || email.split("@")[0],
+          img: "",
+          country: "ID",
+          isSeller: false,
+        });
+        console.log(`👤 User baru dibuat: ${user.username}`);
+      } catch (err) {
+        console.error("❌ Gagal membuat user:", err.message);
+      }
+    }
+
+    const buyerId = user?._id || buyerIdFromMidtrans || null;
+    let order = await Order.findOne({ midtransOrderId: order_id });
+
+    // Order belum ada, buat baru
+    if (!order) {
+      try {
+        order = await Order.create({
+          gigId,
+          title: gig.title,
+          img: gig.cover,
+          price: gig.price,
+          sellerId: gig.userId,
+          buyerId,
+          status: "pending", // status awal tetap pending
+          payment_intent: order_id,
+          midtransToken: transaction.token,
+          midtransOrderId: order_id,
+          customerEmail: email,
+          customerAddress: address,
+          customerName: name || email?.split("@")[0] || "Pengguna",
+          adminFee: Math.round(gig.price * 0.02 * 100) / 100,
+          isBalanceUpdated: false,
+        });
+        console.log(`✅ Order ${order_id} dibuat dengan status pending`);
+      } catch (err) {
+        console.error("❌ Gagal membuat order:", err.message);
+        return res.status(500).json({ message: "Gagal membuat order" });
+      }
+    }
+
+    // Tambah saldo jika belum pernah dilakukan
+    if (!order.isBalanceUpdated) {
+      order.buyerId = order.buyerId || buyerId;
+      order.customerName = name;
+      order.adminFee = Math.round(order.price * 0.02 * 100) / 100;
+
+      const seller = await User.findById(order.sellerId);
+      if (seller) {
+        const sellerRevenue = order.price - order.adminFee;
+        seller.balance = (seller.balance || 0) + sellerRevenue;
+        await seller.save();
+        console.log(`💸 Saldo seller ${seller.username} ditambahkan: ${sellerRevenue}`);
+      }
+
+      const admin = await User.findOne({ role: "admin" });
+      if (admin) {
+        admin.balance = (admin.balance || 0) + order.adminFee;
+        await admin.save();
+        console.log(`💰 Fee admin ditambahkan: ${order.adminFee}`);
+      }
+
+      // ⚠️ HAPUS bagian ini! Jangan tambah sales dulu
+      // await Gig.findByIdAndUpdate(gigId, { $inc: { sales: 1 } });
+
+      order.isBalanceUpdated = true;
+      await order.save();
+      console.log(`✅ Order ${order_id} ditandai isBalanceUpdated = true`);
+    } else {
+      console.log(`ℹ️ Order ${order_id} sudah completed & balance sudah diupdate`);
+    }
+
+    return res.status(200).json({
+      message: "Order berhasil diproses",
+      buyerId,
+    });
   } catch (err) {
     console.error("❌ Webhook error:", err);
     res.status(500).json({ message: "Gagal memproses webhook" });
@@ -204,7 +223,7 @@ export const handleMidtransWebhook = async (req, res) => {
 
 /**
  * ✅ Menghapus order  berdasarkan ID
- */
+ */ 
 export const deleteOrder = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -266,14 +285,12 @@ export const getEarnings = async (req, res, next) => {
       return next(createError(400, "Format User ID tidak valid"));
     }
 
-    const earnings = await Order.aggregate([
-      { $match: { sellerId: new mongoose.Types.ObjectId(userId), status: "completed" } },
-      { $group: { _id: null, totalEarnings: { $sum: "$price" } } }
-    ]);
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
 
     res.status(200).json({
       userId,
-      earnings: earnings[0]?.totalEarnings || 0
+      earnings: user.balance || 0,
     });
   } catch (err) {
     next(err);

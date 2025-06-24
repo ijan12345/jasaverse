@@ -79,6 +79,7 @@ export const getUser = async (req, res) => {
     res.status(200).json({
       ...user._doc, // Menyebarkan data user
       memberSince: formattedDate, // Menambahkan formatted date
+      balance: user.balance,
     });
   } catch (err) {
     console.error(err);
@@ -273,20 +274,73 @@ export const getUserImages = async (req, res) => {
 
 export const getUserProfile = async (req, res, next) => {
   try {
-    // Mencari pengguna berdasarkan ID dari parameter URL
     const user = await User.findById(req.params.id);
     if (!user) {
-      return next(createError(404, "User not found")); // Menggunakan error handler
+      return next(createError(404, "User not found"));
     }
-    res.status(200).json(user); // Mengirimkan data pengguna sebagai respons
+
+    res.status(200).json({
+      ...user._doc,
+      balance: user.balance,
+    });
   } catch (err) {
-    res.status(500).json({ 
-      message: "Error retrieving user profile", 
-      details: err.message 
+    res.status(500).json({
+      message: "Error retrieving user profile",
+      details: err.message,
     });
   }
 };
 
+export const updateBalance = async (req, res) => {
+  const { userId, amount } = req.body;
 
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
+    // ✅ Validasi hanya seller atau admin yang bisa punya saldo
+    if (!user.isSeller && user.role !== "admin") {
+      return res.status(403).json({ message: "Hanya seller atau admin yang memiliki saldo" });
+    }
 
+    if (typeof amount !== "number" || amount < 0) {
+      return res.status(400).json({ message: "Jumlah saldo tidak valid" });
+    }
+
+    user.balance = amount;
+    await user.save();
+
+    res.status(200).json({ message: "Saldo berhasil diperbarui", balance: user.balance });
+  } catch (err) {
+    res.status(500).json({ message: "Gagal memperbarui saldo", error: err.message });
+  }
+};
+
+export const withdrawBalance = async (req, res) => {
+  const { userId, amount } = req.body;
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // ✅ Validasi hanya seller atau admin yang bisa tarik saldo
+    if (!user.isSeller && user.role !== "admin") {
+      return res.status(403).json({ message: "Hanya seller atau admin yang memiliki saldo" });
+    }
+
+    if (typeof amount !== "number" || amount <= 0) {
+      return res.status(400).json({ message: "Jumlah penarikan tidak valid" });
+    }
+
+    if (user.balance < amount) {
+      return res.status(400).json({ message: "Saldo tidak mencukupi" });
+    }
+
+    user.balance -= amount;
+    await user.save();
+
+    res.status(200).json({ message: "Penarikan berhasil", sisaSaldo: user.balance });
+  } catch (err) {
+    res.status(500).json({ message: "Gagal menarik saldo", error: err.message });
+  }
+};

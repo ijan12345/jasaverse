@@ -9,6 +9,10 @@ const WithdrawalSchema = new Schema(
       required: true,
       index: true,
     },
+    isBalanceUpdated: {
+  type: Boolean,
+  default: false,
+},
     amount: {
       type: Number,
       required: true,
