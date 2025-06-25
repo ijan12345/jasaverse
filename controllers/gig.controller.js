@@ -5,12 +5,12 @@ import createError from "../utils/createError.js";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import User from "../models/user.model.js"
+import cloudinary from "../utils/cloudinary.js";
 
 // Fungsi untuk membuat Gig
 export const createGig = async (req, res, next) => {
   try {
     const token = req.cookies.accessToken || req.headers.authorization?.split(" ")[1];
-
     if (!token) return next(createError(401, "You must be logged in"));
 
     const decoded = jwt.verify(token, process.env.JWT_KEY);
@@ -18,13 +18,21 @@ export const createGig = async (req, res, next) => {
 
     if (!decoded.isSeller) return next(createError(403, "Only sellers can create a gig!"));
 
-    const { cover } = req.body;
+    const {
+      cover,
+      coverPublicId,        // ✅ Terima dari frontend saat upload
+      images,
+      imagePublicIds,       // ✅ Terima dari frontend saat upload multiple
+    } = req.body;
 
-   const newGig = new Gig({
-  ...req.body,
-  userId: new mongoose.Types.ObjectId(req.userId), // ✅ pastikan ObjectId
-});
-
+    const newGig = new Gig({
+      ...req.body,
+      userId: new mongoose.Types.ObjectId(req.userId),
+      cover,
+      coverPublicId,
+      images,
+      imagePublicIds,
+    });
 
     const savedGig = await newGig.save();
     res.status(201).json(savedGig);
@@ -40,13 +48,22 @@ export const deleteGig = async (req, res, next) => {
     const gig = await Gig.findById(req.params.id);
     if (!gig) return next(createError(404, "Gig not found!"));
 
-    // Ambil informasi user berdasarkan userId
     const user = await User.findById(req.userId);
     if (!user) return next(createError(404, "User not found!"));
 
-    // Cek apakah user adalah pemilik gig atau admin
     if (gig.userId.toString() !== req.userId.toString() && user.role !== "admin") {
       return next(createError(403, "You can only delete your own gig unless you are an admin!"));
+    }
+
+    // ✅ Hapus gambar dari Cloudinary
+    if (gig.coverPublicId) {
+      await cloudinary.uploader.destroy(gig.coverPublicId);
+    }
+
+    if (gig.imagePublicIds && Array.isArray(gig.imagePublicIds)) {
+      for (const publicId of gig.imagePublicIds) {
+        await cloudinary.uploader.destroy(publicId);
+      }
     }
 
     await Gig.findByIdAndDelete(req.params.id);
@@ -55,9 +72,6 @@ export const deleteGig = async (req, res, next) => {
     next(err);
   }
 };
-
-
-
 export const getGig = async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {

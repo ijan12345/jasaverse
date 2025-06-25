@@ -35,10 +35,17 @@ const GigSchema = new Schema(
     cover: {
       type: String,
       required: true,
-    },   
+    },
+    coverPublicId: {
+      type: String, // ✅ ID untuk menghapus gambar dari Cloudinary
+    },
     images: {
       type: [String],
       required: false,
+    },
+    imagePublicIds: {
+      type: [String], // ✅ ID untuk menghapus multiple gambar dari Cloudinary
+      default: [],
     },
     shortTitle: {
       type: String,
@@ -71,4 +78,3 @@ const GigSchema = new Schema(
 );
 
 export default mongoose.model("Gig", GigSchema);
-

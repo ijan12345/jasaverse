@@ -107,10 +107,10 @@ export const deleteUser = async (req, res, next) => {
 
     // 1️⃣ Hapus file Cloudinary milik user
     const cloudinaryIds = [
-      user.profilePublicId,
-      user.cvPublicId,
-      user.certificatePublicId,
-    ].filter(Boolean); // hanya yang ada saja
+  user.imgPublicId,
+  user.cvPublicId,
+  ...(Array.isArray(user.certificatePublicIds) ? user.certificatePublicIds : []),
+].filter(Boolean);// hanya yang ada saja
 
     for (const publicId of cloudinaryIds) {
       await cloudinary.uploader.destroy(publicId);

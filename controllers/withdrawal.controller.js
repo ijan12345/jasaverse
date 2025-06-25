@@ -58,6 +58,18 @@ export const handleXenditWebhook = async (req, res) => {
     await targetUser.save();
     console.log(`💸 Balance ${targetUser.username} dikurangi: ${withdrawal.amount}`);
   }
+    // ✅ Merge data webhook ke payoutResponse
+  withdrawal.payoutResponse = {
+    ...withdrawal.payoutResponse,
+    bank_code: event.bank_code,
+    account_holder_name: event.account_holder_name,
+    disbursement_description: event.disbursement_description,
+    is_instant: event.is_instant,
+    id: event.id,
+    created: event.created,
+    updated: event.updated,
+    external_id: event.external_id,
+  };
 }
 
 

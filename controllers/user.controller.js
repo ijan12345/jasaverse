@@ -6,6 +6,11 @@ import mongoose from "mongoose";
 import Gig from "../models/gig.model.js";  // ✅ Tambahkan ini
 import Order from "../models/order.model.js";
 import Review from "../models/review.model.js"
+import Message from "../models/message.model.js";
+import extractPublicId from "../utils/extractPublicId.js";
+import cloudinary from "../utils/cloudinary.js";
+import Conversation from "../models/conversation.model.js";
+
 
 
 
@@ -28,37 +33,43 @@ export const getAllUsers = async (req, res) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
-    // Find the user by ID
     const user = await User.findById(req.params.id);
-    if (!user) {
-      return next(createError(404, "User not found"));
+    if (!user) return next(createError(404, "User not found"));
+
+    if (req.userId !== user._id.toString() && req.user.role !== "admin") {
+      return next(createError(403, "Unauthorized access"));
     }
 
-    // Check if the logged-in user is trying to delete their own account
-    if (req.userId !== user._id.toString()) {
-      return next(createError(403, "You can delete only your account!"));
+    // 🔴 Hapus profil image
+    if (user.imgPublicId) {
+      await cloudinary.uploader.destroy(user.imgPublicId);
     }
 
-    // Delete the user's orders
+    // 🔴 Hapus CV
+    if (user.cvPublicId) {
+      await cloudinary.uploader.destroy(user.cvPublicId);
+    }
+
+    // 🔴 Hapus Sertifikat
+    if (Array.isArray(user.certificatePublicIds)) {
+      for (const publicId of user.certificatePublicIds) {
+        await cloudinary.uploader.destroy(publicId);
+      }
+    }
+
+    // Hapus semua data terkait
     await Order.deleteMany({ userId: user._id });
-
-    // Delete the user's gigs
     await Gig.deleteMany({ userId: user._id });
-
-    // Delete the user's reviews
     await Review.deleteMany({ userId: user._id });
-
-    // Delete the user's conversations and messages
     await Conversation.deleteMany({ userId: user._id });
     await Message.deleteMany({ userId: user._id });
 
-    // Delete the user
     await User.findByIdAndDelete(req.params.id);
 
-    res.status(200).json({ message: "User and all associated data deleted successfully." });
+    res.status(200).json({ message: "User dan semua data terkait berhasil dihapus." });
   } catch (err) {
     res.status(500).json({
-      error: "An error occurred while deleting the user",
+      error: "Gagal menghapus user",
       details: err.message,
     });
   }

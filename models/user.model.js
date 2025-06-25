@@ -22,6 +22,8 @@ const userSchema = new Schema(
       required: false, // Gambar pengirim bisa kosong
     },
     imgPublicId: { type: String },
+    cvPublicId: { type: String },
+certificatePublicIds: [{ type: String }],
     role: {
       type: String,
       enum: ["buyer", "seller", "admin"], // Menentukan peran pengguna
