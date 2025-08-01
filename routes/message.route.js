@@ -6,6 +6,7 @@ import {
   updateReadStatus,
   deleteMessage,
   deleteMessageForEveryone,
+  getAverageResponseTime ,
 } from "../controllers/message.controller.js";
 import { verifyToken } from "../middleware/jwt.js";
 
@@ -15,7 +16,7 @@ router.delete("/:id", verifyToken, deleteMessage);
 router.delete("/:id/all", verifyToken, deleteMessageForEveryone);
 // Route untuk membuat pesan baru
 router.post("/", verifyToken, createMessage);
-
+router.get("/response-time/:userId", getAverageResponseTime);
 // Route untuk mengambil pesan berdasarkan conversationId
 router.get("/:id", verifyToken, getMessages);
 

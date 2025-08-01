@@ -42,18 +42,12 @@ const GigSchema = new Schema(
     images: {
       type: [String],
       required: false,
+       default: [],
     },
     imagePublicIds: {
       type: [String], // ✅ ID untuk menghapus multiple gambar dari Cloudinary
       default: [],
-    },
-    shortTitle: {
-      type: String,
-      required: true,
-    },
-    shortDesc: {
-      type: String,
-      required: true,
+      required: false,
     },
     deliveryTime: {
       type: Number,

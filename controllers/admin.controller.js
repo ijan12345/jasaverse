@@ -5,7 +5,6 @@ import Order from "../models/order.model.js";
 import Message from "../models/message.model.js";
 import Review from "../models/review.model.js";
 import Conversation from "../models/conversation.model.js";
-import Seller from "../models/seller.model.js";
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 dotenv.config();
@@ -135,7 +134,6 @@ export const deleteUser = async (req, res, next) => {
       Order.deleteMany({ $or: [{ buyerId: userId }, { sellerId: userId }] }),
       Message.deleteMany({ $or: [{ userId: userId.toString() }, { members: userId }] }),
       Review.deleteMany({ userId }),
-      Seller.deleteOne({ userId }),
       Conversation.deleteMany({ $or: [{ sellerId: userId }, { buyerId: userId }] }),
       User.findByIdAndDelete(userId),
     ]);
@@ -250,4 +248,7 @@ export const demoteAdmin = async (req, res, next) => {
     next(err);
   }
 };
+
+
+
 

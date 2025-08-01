@@ -37,6 +37,11 @@ deletedByBuyer: {
   type: Boolean,
   default: false,
 },
+orderId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Order",
+  required: true,
+},
 
     lastMessage: {
       type: String,

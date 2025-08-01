@@ -1,45 +1,124 @@
 import createError from "../utils/createError.js";
 import Review from "../models/review.model.js";
 import Gig from "../models/gig.model.js";
+import Order from "../models/order.model.js";
 
 export const createReview = async (req, res, next) => {
-  // Remove the check that prevents sellers from creating a review
-  // if (req.isSeller) 
-  //   return next(createError(403, "Sellers can't create a review!"));
-
-  const newReview = new Review({
-    userId: req.userId,
-    gigId: req.body.gigId,
-    desc: req.body.desc,
-    star: req.body.star,
-  });
-
   try {
-    // Check if the user has already created a review for the same gig
-    const review = await Review.findOne({
-      gigId: req.body.gigId,
+    const { gigId, desc, star } = req.body;
+
+    // 1. Pastikan belum pernah review
+    const existingReview = await Review.findOne({
+      gigId,
       userId: req.userId,
     });
 
-    if (review)
-      return next(
-        createError(403, "You have already created a review for this gig!")
-      );
+    if (existingReview) {
+      return next(createError(403, "❗ Kamu sudah memberi ulasan untuk gig ini"));
+    }
 
-    // TODO: Check if the user has purchased the gig (if needed)
-
-    // Save the new review
-    const savedReview = await newReview.save();
-
-    // Update the gig's ratings with the new review
-    await Gig.findByIdAndUpdate(req.body.gigId, {
-      $inc: { totalStars: req.body.star, starNumber: 1 },
+    // 2. Cek apakah user adalah pembeli dengan order aktif
+    const validOrder = await Order.findOne({
+      gigId,
+      buyerId: req.userId,
+      status: { $in: ["pending", "in_progress", "accepted"] },
     });
 
-    // Respond with the saved review
+    // 3. Cek apakah user adalah pemilik gig
+    const gig = await Gig.findById(gigId);
+    if (!gig) return next(createError(404, "Gig tidak ditemukan"));
+
+    const isOwner = gig.userId.toString() === req.userId.toString();
+
+    // 4. Hanya boleh lanjut jika pembeli aktif atau pemilik gig
+    if (!validOrder && !isOwner) {
+      return next(createError(403, "❌ Hanya pembeli aktif atau pemilik gig yang dapat memberi ulasan"));
+    }
+
+    const newReview = new Review({
+      userId: req.userId,
+      gigId,
+      desc,
+      star,
+    });
+
+    const savedReview = await newReview.save();
+
+    await Gig.findByIdAndUpdate(gigId, {
+      $inc: { totalStars: star, starNumber: 1 },
+    });
+
     res.status(201).send(savedReview);
   } catch (err) {
     next(err);
+  }
+};
+
+export const reportReview = async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+
+    if (!review) return res.status(404).json({ message: "Review not found" });
+
+    if (!Array.isArray(review.reportedInfo)) {
+      review.reportedInfo = [];
+    }
+
+    const alreadyReported = review.reportedInfo.some(info =>
+      info.user.toString() === req.userId.toString()
+    );
+
+    if (alreadyReported) {
+      return res.status(400).json({ message: "Kamu sudah melaporkan review ini" });
+    }
+
+    if (!req.body.reason || req.body.reason.trim() === "") {
+      return res.status(400).json({ message: "Alasan pelaporan wajib diisi" });
+    }
+
+    review.reported = true;
+    review.reportedInfo.push({
+      user: req.userId,
+      reason: req.body.reason,
+    });
+
+    await review.save();
+
+    res.status(200).json({ success: true, message: "Review telah dilaporkan" });
+  } catch (err) {
+    console.error("Gagal melaporkan review:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
+export const normalizeReportedReview = async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+    if (!review) return res.status(404).json({ message: "Review not found" });
+
+    review.reported = false;
+    review.reportedBy = [];
+    review.reportReason = "";
+    await review.save();
+
+    res.status(200).json({ success: true, message: "Review dinormalkan" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
+export const getReportedReviews = async (req, res) => {
+  try {
+  const reviews = await Review.find({ reported: true })
+   .populate("userId")
+  .populate("gigId", "title")
+    .populate("userId gigId reportedInfo.user")
+  .sort({ updatedAt: -1 });
+    res.status(200).json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
 };
 

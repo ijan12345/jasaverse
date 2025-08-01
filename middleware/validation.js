@@ -1,8 +1,8 @@
 const validateGigUpdate = (req, res, next) => {
-    const { title, desc, category, price, cover, shortTitle, shortDesc, deliveryTime, revisionNumber, sales } = req.body;
+    const { title, desc, category, price, cover, deliveryTime, revisionNumber, sales } = req.body;
 
     // Pastikan semua field yang diperlukan ada
-    if (!title || !desc || !category || !price || !cover || !shortTitle || !shortDesc || !deliveryTime || !revisionNumber) {
+    if (!title || !desc || !category || !price || !cover || !deliveryTime || !revisionNumber) {
       return res.status(400).json({ message: "Beberapa field wajib tidak diisi" });
     }
 

@@ -19,18 +19,18 @@ const userSchema = new Schema(
     },
     img: {
       type: String,
-      required: false, // Gambar pengirim bisa kosong
+      required: false,
     },
     imgPublicId: { type: String },
     cvPublicId: { type: String },
-certificatePublicIds: [{ type: String }],
+    certificatePublicIds: [{ type: String }],
     role: {
       type: String,
-      enum: ["buyer", "seller", "admin"], // Menentukan peran pengguna
+      enum: ["buyer", "seller", "admin"],
       default: "buyer",
     },
     permissions: {
-      type: [String], // Hak akses spesifik untuk admin
+      type: [String],
       default: [],
     },
     country: {
@@ -50,44 +50,55 @@ certificatePublicIds: [{ type: String }],
       default: false,
     },
     cvImage: {
-      type: String, // URL atau path untuk file CV yang diunggah
-       default: ""
+      type: String,
+      default: "",
     },
     certificateImages: {
-      type: [String], // URL atau path untuk file sertifikat yang diunggah
-      default: [], // Tidak wajib diisi
+      type: [String],
+      default: [],
     },
     rank: {
-      type: Number, // Rank berupa angka
-      default: 0, // Default null jika belum ada rank
+      type: Number,
+      default: 0,
     },
     isAdmin: {
       type: Boolean,
-      default: false, // Default false, akan di-update jika role === "admin"
+      default: false,
     },
     score: {
       type: Number,
-      default: 0, // Default score 0 saat user pertama kali mendaftar
-      min: 0, // Batas minimum score agar tidak negatif
-    },    
+      default: 0,
+      min: 0,
+    },
     totalPurchases: {
-  type: Number,
-  default: 0,
-},
-emailVerified: {
-  type: Boolean,
-  default: false,
-},
-balance: {
-  type: Number,
-  default: 0, // Default saldo 0 saat user baru dibuat
-  min: 0, // Tidak boleh negatif
+      type: Number,
+      default: 0,
+    },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    lastVerifiedAt: {
+  type: Date,
+  default: null,
 },
 
 
-    createdAt: { 
-      type: Date, 
-      default: Date.now 
+    // 🔑 Saldo untuk sistem escrow
+    availableBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    pendingBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    createdAt: {
+      type: Date,
+      default: Date.now,
     },
   },
   {
@@ -95,7 +106,7 @@ balance: {
   }
 );
 
-// Middleware untuk update isAdmin berdasarkan role
+// Middleware otomatis set isAdmin saat role berubah
 userSchema.pre("save", function (next) {
   this.isAdmin = this.role === "admin";
   next();

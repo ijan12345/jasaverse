@@ -53,8 +53,9 @@ export const handleXenditWebhook = async (req, res) => {
   // KURANGI SALDO USER / ADMIN
   const targetUser = await User.findById(withdrawal.userId);
   if (targetUser) {
-    const newBalance = (targetUser.balance || 0) - withdrawal.amount;
-    targetUser.balance = newBalance < 0 ? 0 : newBalance;
+    const newBalance = (targetUser.availableBalance || 0) - withdrawal.amount;
+targetUser.availableBalance = newBalance < 0 ? 0 : newBalance;
+
     await targetUser.save();
     console.log(`💸 Balance ${targetUser.username} dikurangi: ${withdrawal.amount}`);
   }
@@ -105,28 +106,21 @@ export const requestWithdrawal = async (req, res, next) => {
     const user = await User.findById(userId);
     if (!user) return next(createError(404, "User tidak ditemukan"));
 
-    let availableBalance = 0;
-    let balanceOwner = userId;
+    let balanceOwner = sellerId || userId;
+   let ownerUser = null;
+let availableBalance = 0;
 
-    if (user.isAdmin && sellerId === "admin") {
-      const adminIncome = await Order.aggregate([
-        { $match: { status: "completed" } },
-        { $group: { _id: null, total: { $sum: "$adminFee" } } },
-      ]);
-      const totalAdminFee = adminIncome[0]?.total || 0;
+// Cek apakah ini penarikan admin
+if (sellerId === "admin" && user.isAdmin) {
+  ownerUser = user; // admin = user yang login
+  availableBalance = user.availableBalance || 0;
+} else {
+  // seller biasa
+  ownerUser = await User.findById(balanceOwner);
+  if (!ownerUser) return next(createError(404, "Pemilik saldo tidak ditemukan"));
+  availableBalance = ownerUser.availableBalance || 0;
+}
 
-      const adminWithdrawals = await Withdrawal.aggregate([
-        { $match: { userId: new mongoose.Types.ObjectId(userId), sellerId: "admin", status: { $ne: "failed" } } },
-        { $group: { _id: null, total: { $sum: "$amount" } } },
-      ]);
-      const totalWithdrawn = adminWithdrawals[0]?.total || 0;
-
-      availableBalance = totalAdminFee - totalWithdrawn;
-      balanceOwner = "admin";
-    } else {
-      balanceOwner = sellerId || userId;
-      availableBalance = await getAvailableEarnings(balanceOwner);
-    }
 
     if (amount > availableBalance) {
       return next(createError(400, "Saldo tidak mencukupi untuk penarikan ini"));
@@ -143,12 +137,40 @@ export const requestWithdrawal = async (req, res, next) => {
       description: note || "Penarikan saldo",
     });
 
-    // Jika user biasa (seller), tandai order sebagai isWithdrawn
-    if (!user.isAdmin || sellerId !== "admin") {
-      await Order.updateMany(
-        { sellerId: balanceOwner, status: "completed", isWithdrawn: { $ne: true } },
-        { $set: { isWithdrawn: true } }
-      );
+    // ✅ Kurangi saldo user (admin atau seller)
+    ownerUser.availableBalance = Math.max(availableBalance - amount, 0);
+    await ownerUser.save();
+
+    // ✅ Jika bukan admin, tandai order yang ditarik
+    const isAdminWithdrawal = user.isAdmin && sellerId === "admin";
+    if (!isAdminWithdrawal) {
+      const eligibleOrders = await Order.find({
+        sellerId: balanceOwner,
+        status: "completed",
+        isWithdrawn: { $ne: true },
+      }).sort({ createdAt: 1 });
+
+      let accumulated = 0;
+      const orderIdsToUpdate = [];
+
+      for (const order of eligibleOrders) {
+        const adminFee = order.adminFee ?? order.price * 0.02;
+        const netEarning = order.price - adminFee;
+
+        if (accumulated + netEarning <= amount) {
+          accumulated += netEarning;
+          orderIdsToUpdate.push(order._id);
+        } else {
+          break;
+        }
+      }
+
+      if (orderIdsToUpdate.length > 0) {
+        await Order.updateMany(
+          { _id: { $in: orderIdsToUpdate } },
+          { $set: { isWithdrawn: true } }
+        );
+      }
     }
 
     const withdrawal = await Withdrawal.create({
@@ -163,15 +185,20 @@ export const requestWithdrawal = async (req, res, next) => {
       payoutResponse: xenditResponse,
     });
 
-    res.status(201).json({
-      message: "✅ Permintaan penarikan berhasil dikirim ke Xendit",
-      withdrawal,
-    });
+   const updatedUser = await User.findById(userId); // ambil user terbaru setelah saldo dikurangi
+
+res.status(201).json({
+  message: "✅ Permintaan penarikan berhasil dikirim ke Xendit",
+  withdrawal,
+  user: updatedUser,
+});
+
   } catch (err) {
     console.error("❌ Error Xendit:", err?.response?.data || err.message);
     next(createError(500, "Gagal melakukan penarikan via Xendit"));
   }
 };
+
 
 export const getMyWithdrawals = async (req, res, next) => {
   try {

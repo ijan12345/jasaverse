@@ -5,44 +5,63 @@ const ReviewSchema = new Schema(
   {
     gigId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Gig", // Referensi ke model Gig
+      ref: "Gig",
       required: true,
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // Referensi ke model User
+      ref: "User",
       required: true,
     },
     star: {
       type: Number,
       required: true,
-      enum: [1, 2, 3, 4, 5], // Hanya nilai 1-5 yang diperbolehkan
+      enum: [1, 2, 3, 4, 5],
     },
     desc: {
       type: String,
-      required: true, // Deskripsi review wajib diisi
+      required: true,
     },
     likedUsers: {
-      type: [mongoose.Schema.Types.ObjectId], // Array ID user yang memberikan like
+      type: [mongoose.Schema.Types.ObjectId],
       ref: "User",
       default: [],
     },
     dislikedUsers: {
-      type: [mongoose.Schema.Types.ObjectId], // Array ID user yang memberikan dislike
+      type: [mongoose.Schema.Types.ObjectId],
       ref: "User",
       default: [],
     },
     likes: {
       type: Number,
-      default: 0, // Jumlah total like
+      default: 0,
     },
     dislikes: {
       type: Number,
-      default: 0, // Jumlah total dislike
+      default: 0,
     },
+
+    // ✅ Revisi bagian pelaporan
+    reported: {
+      type: Boolean,
+      default: false,
+    },
+    reportedInfo: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        reason: {
+          type: String,
+          required: true,
+        },
+      },
+    ],
   },
   {
-    timestamps: true, // Tambahkan createdAt & updatedAt secara otomatis
+    timestamps: true,
   }
 );
 

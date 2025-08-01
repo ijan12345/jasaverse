@@ -6,7 +6,8 @@ import {
   getGig,
   getGigs,
   updateGig,
-  getTotalSales
+  getTotalSales,
+  getUserAverageRating
 } from "../controllers/gig.controller.js";
 import validateGigUpdate from "../middleware/validation.js";
 import upload from "../middleware/uploadMiddleware.js";
@@ -25,6 +26,7 @@ router.get("/totalSales/:userId", verifyToken, getTotalSales);
 // Route untuk menghapus Gig
 router.delete("/:id", verifyToken, deleteGig);
 
+router.get("/ratings/:userId", getUserAverageRating);
 // Route untuk mendapatkan Gig berdasarkan ID
 router.get("/single/:id", verifyToken, getGig);
 

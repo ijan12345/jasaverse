@@ -11,17 +11,14 @@ const OrderSchema = new Schema(
     },
     customerEmail: {
       type: String,
-      required: false,
       trim: true,
     },
     customerName: {
       type: String,
-      required: false,
       trim: true,
     },
     customerAddress: {
       type: String,
-      required: false,
       trim: true,
     },
     img: {
@@ -33,10 +30,6 @@ const OrderSchema = new Schema(
       required: true,
       trim: true,
     },
-    isBalanceUpdated: {
-  type: Boolean,
-  default: false,
-},
     price: {
       type: Number,
       required: true,
@@ -45,33 +38,128 @@ const OrderSchema = new Schema(
     sellerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: false,
       index: true,
     },
     buyerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: false,
       index: true,
     },
-    midtransToken: {
-      type: String,
-      default: null,
-    },
-    midtransOrderId: {
-      type: String,
-      default: null,
-    },
-    status: {
-      type: String,
-      enum: ["pending", "completed", "failed"],
-      default: "pending",
-    },
-    adminFee: {
+xenditInvoiceId: {
+  type: String,
+  default: null,
+  index: true, // supaya mudah dicari saat webhook
+},
+xenditInvoiceUrl: {
+  type: String,
+  default: null,
+},
+
+    withdrawnAmount: {
   type: Number,
-  required: true,
   default: 0,
 },
+    status: {
+      type: String,
+      enum: ["pending", "in_progress", "completed", "failed", "canceled"],
+      default: "pending",
+    },
+
+    // ESCROW FIELDS
+  escrowStatus: {
+  type: String,
+  enum: ["held", "released", "refunded"], // ✅ ditambahkan
+  default: "held",
+},
+    escrowReleasedAt: {
+      type: Date,
+      default: null,
+    },
+    refundedAt: { // ✅ tambahan baru
+  type: Date,
+  default: null,
+},
+    sellerAccepted: {
+      type: Boolean,
+      default: false,
+    },
+    sellerAcceptedAt: {
+      type: Date,
+      default: null,
+    },
+    buyerConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+    extraRequest: {
+  description: { type: String },
+  amount: { type: Number },
+  status: { type: String, enum: ['pending', 'accepted', 'rejected', 'paid'], default: 'pending' },
+},
+dispute: {
+  reportedBy: String, // buyerId
+  reason: String,
+  reportDate: Date,
+  sellerResponse: String,
+  sellerRespondedAt: Date,
+  resolved: Boolean,
+  resolutionNote: String,
+  resolvedBy: String, // adminId
+  status: { type: String, enum: ['none', 'disputed', 'under_review', 'resolved'], default: 'none' },
+},
+workStartedAt: { type: Date },
+workCompletedAt: { type: Date },
+progressStatus: {
+  type: String,
+  enum: [
+    "awaiting_seller_acceptance",
+    "accepted",
+    "in_progress",
+    "revision_requested",
+    "extra_revision_requested",
+    "extra_revision_paid",
+    "extra_paid", // ✅ Tambahkan ini agar validasi tidak error
+    "delivered",
+    "seller_refunded",
+  ],
+  default: "awaiting_seller_acceptance",
+},
+
+extraPayments: [
+  {
+    token: String,
+    orderId: String,
+    amount: Number,
+    description: String,
+    status: { type: String, default: "pending" },
+  }
+],
+
+
+
+    // SYSTEM FIELDS
+    isBalanceUpdated: {
+      type: Boolean,
+      default: false,
+    },
+    released: {
+      type: Boolean,
+      default: false,
+    },
+    isWithdrawn: {
+      type: Boolean,
+      default: false,
+    },
+    hasDispute: {
+      type: Boolean,
+      default: false,
+    },
+
+    adminFee: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
     payment_intent: {
       type: String,
       required: true,

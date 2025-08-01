@@ -7,9 +7,11 @@ import Gig from "../models/gig.model.js";  // ✅ Tambahkan ini
 import Order from "../models/order.model.js";
 import Review from "../models/review.model.js"
 import Message from "../models/message.model.js";
-import extractPublicId from "../utils/extractPublicId.js";
 import cloudinary from "../utils/cloudinary.js";
 import Conversation from "../models/conversation.model.js";
+import Blacklist from "../models/blacklist.model.js"; // ❗ INI HARUS ADA
+
+
 
 
 
@@ -75,6 +77,94 @@ export const deleteUser = async (req, res, next) => {
   }
 };
 
+export const getUserBalance = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    const user = await User.findById(userId);
+    if (!user) return next(createError(404, "User tidak ditemukan"));
+
+    res.status(200).json({
+      availableBalance: user.availableBalance ?? 0,
+      pendingBalance: user.pendingBalance ?? 0,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+export const changeEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    // Cek apakah user ada
+    const user = await User.findById(req.params.id);
+    if (!user) return next(createError(404, "User tidak ditemukan"));
+
+    // Cek email sudah digunakan belum
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) return next(createError(400, "Email sudah digunakan"));
+
+    // Update email
+    user.email = email;
+    user.emailVerified = false;
+    user.lastVerifiedAt = null;
+    await user.save();
+
+    res.status(200).json({ message: "Email berhasil diubah" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const changePhone = async (req, res, next) => {
+  try {
+    const { phone } = req.body;
+
+    const user = await User.findById(req.params.id);
+    if (!user) return next(createError(404, "User tidak ditemukan"));
+
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) return next(createError(400, "Nomor sudah digunakan"));
+
+    user.phone = phone;
+    await user.save();
+
+    res.status(200).json({ message: "Nomor telepon berhasil diubah" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// controllers/blacklist.controller.js
+
+// Ambil semua email yang diblacklist
+export const getBlacklistedEmails = async (req, res) => {
+  try {
+    const blacklist = await Blacklist.find({});
+    res.status(200).json(blacklist);
+  } catch (err) {
+    res.status(500).json({ message: "Gagal mengambil data blacklist." });
+  }
+};
+
+// Tambah email ke blacklist
+export const addEmailToBlacklist = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "Email wajib diisi." });
+
+  const exists = await Blacklist.findOne({ email });
+  if (exists) return res.status(400).json({ message: "Email sudah diblacklist." });
+
+  const result = await new Blacklist({ email }).save();
+  res.status(201).json(result);
+};
+
+// Hapus email dari blacklist
+export const removeEmailFromBlacklist = async (req, res) => {
+  const { email } = req.params;
+  await Blacklist.deleteOne({ email });
+  res.status(200).json({ message: "Email berhasil dihapus." });
+};
+
 export const getUser = async (req, res) => {
   const userId = req.params.id;
 
@@ -84,17 +174,36 @@ export const getUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Format tanggal menggunakan date-fns
-    const formattedDate = format(new Date(user.createdAt), "d MMMM yyyy, HH:mm:ss", { locale: id });
+    // ✅ Logika reset verifikasi jika lewat 24 jam
+    if (user.emailVerified && user.lastVerifiedAt) {
+      const diff = Date.now() - new Date(user.lastVerifiedAt).getTime();
+      const oneDay = 24 * 60 * 60 * 1000;
+
+      if (diff > oneDay) {
+        user.emailVerified = false;
+        await user.save();
+      }
+    }
+
+    // Format tanggal akun dibuat
+    const formattedDate = format(
+      new Date(user.createdAt),
+      "d MMMM yyyy, HH:mm:ss",
+      { locale: id }
+    );
 
     res.status(200).json({
-      ...user._doc, // Menyebarkan data user
-      memberSince: formattedDate, // Menambahkan formatted date
-      balance: user.balance,
+      ...user._doc,
+      memberSince: formattedDate,
+      availableBalance: user.availableBalance,
+      pendingBalance: user.pendingBalance,
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "An error occurred while retrieving the user", details: err.message });
+    res.status(500).json({
+      message: "An error occurred while retrieving the user",
+      details: err.message,
+    });
   }
 };
 
@@ -191,12 +300,12 @@ export const getUserRank = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validasi apakah ID user valid
+    // Validasi ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "ID user tidak valid" });
     }
 
-    // Cek apakah user adalah seller
+    // Ambil user
     const user = await User.findById(id);
     if (!user) {
       return res.status(404).json({ message: "User tidak ditemukan." });
@@ -208,7 +317,7 @@ export const getUserRank = async (req, res) => {
     // Ambil semua seller
     const sellers = await User.find({ isSeller: true });
 
-    // Hitung skor untuk setiap seller
+    // Hitung skor untuk tiap seller
     const processedSellers = await Promise.all(
       sellers.map(async (seller) => {
         const sellerId = new mongoose.Types.ObjectId(seller._id);
@@ -217,13 +326,16 @@ export const getUserRank = async (req, res) => {
         const gigs = await Gig.find({ userId: sellerId });
         const gigIds = gigs.map(gig => gig._id);
 
-        // Hitung total penjualan dari semua gigs seller
-        const totalSales = await Order.countDocuments({ gigId: { $in: gigIds } });
+        // Hitung total sales dengan status completed
+        const totalSales = await Order.countDocuments({
+          gigId: { $in: gigIds },
+          status: "completed",
+        });
 
-        // Hitung jumlah gigs yang dimiliki
+        // Hitung jumlah gigs
         const ownedGigsCount = gigIds.length;
 
-        // Hitung skor seller
+        // Hitung skor
         const score = totalSales * 9 + ownedGigsCount * 4;
 
         return {
@@ -236,24 +348,25 @@ export const getUserRank = async (req, res) => {
       })
     );
 
-    // Urutkan seller berdasarkan skor tertinggi
+    // Urutkan berdasarkan skor tertinggi
     const sortedSellers = processedSellers.sort((a, b) => b.score - a.score);
 
     // Tambahkan ranking
     const rankedSellers = sortedSellers.map((seller, index) => ({
       ...seller,
-      rank: index + 1, // Ranking dimulai dari 1
+      rank: index + 1,
     }));
 
-    // Cari rank berdasarkan ID seller
+    // Temukan ranking untuk user yang diminta
     const userRank = rankedSellers.find(seller => seller._id.toString() === id);
 
     if (!userRank) {
       return res.status(404).json({ message: "Seller tidak ditemukan dalam daftar peringkat." });
     }
 
-    // ✅ Simpan rank ke database
+    // Simpan rank dan score ke database
     user.rank = userRank.rank;
+    user.score = userRank.score;
     await user.save();
 
     res.status(200).json(userRank);
@@ -262,7 +375,6 @@ export const getUserRank = async (req, res) => {
     res.status(500).json({ message: "Gagal mengambil peringkat user", error: err.message });
   }
 };
-
 
 // Fungsi untuk mengambil URL gambar CV dan sertifikat
 export const getUserImages = async (req, res) => {
@@ -290,10 +402,12 @@ export const getUserProfile = async (req, res, next) => {
       return next(createError(404, "User not found"));
     }
 
-    res.status(200).json({
-      ...user._doc,
-      balance: user.balance,
-    });
+   res.status(200).json({
+  ...user._doc,
+  availableBalance: user.availableBalance,
+  pendingBalance: user.pendingBalance,
+});
+
   } catch (err) {
     res.status(500).json({
       message: "Error retrieving user profile",
@@ -302,56 +416,112 @@ export const getUserProfile = async (req, res, next) => {
   }
 };
 
-export const updateBalance = async (req, res) => {
-  const { userId, amount } = req.body;
 
+export const getUserEscrowBalance = async (req, res, next) => {
   try {
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const { id } = req.params;
 
-    // ✅ Validasi hanya seller atau admin yang bisa punya saldo
-    if (!user.isSeller && user.role !== "admin") {
-      return res.status(403).json({ message: "Hanya seller atau admin yang memiliki saldo" });
-    }
+    // Cari user, pastikan ada
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
 
-    if (typeof amount !== "number" || amount < 0) {
-      return res.status(400).json({ message: "Jumlah saldo tidak valid" });
-    }
+    // Ambil semua order yang sudah selesai dan belum ditarik
+    const completedOrders = await Order.find({
+      sellerId: id,
+      status: "completed",
+      isWithdrawn: { $ne: true },
+    });
 
-    user.balance = amount;
-    await user.save();
+    const earnings = completedOrders.reduce((total, order) => {
+      const adminFee = order.adminFee ?? order.price * 0.02; // 2% default fee
+      return total + (order.price - adminFee);
+    }, 0);
 
-    res.status(200).json({ message: "Saldo berhasil diperbarui", balance: user.balance });
+    res.status(200).json({
+      availableBalance: earnings,
+      pendingBalance: 0, // bisa dihitung jika kamu pakai status "processing" misalnya
+    });
   } catch (err) {
-    res.status(500).json({ message: "Gagal memperbarui saldo", error: err.message });
+    console.error("❌ Gagal hitung saldo escrow:", err);
+    res.status(500).json({ message: "Gagal mengambil saldo" });
   }
 };
 
-export const withdrawBalance = async (req, res) => {
-  const { userId, amount } = req.body;
-
+export const updateBalance = async (req, res, next) => {
   try {
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const { userId, availableBalance, pendingBalance } = req.body;
 
-    // ✅ Validasi hanya seller atau admin yang bisa tarik saldo
-    if (!user.isSeller && user.role !== "admin") {
-      return res.status(403).json({ message: "Hanya seller atau admin yang memiliki saldo" });
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
+
+    // ❌ Jangan timpa dengan nilai kosong jika tidak dikirim
+    if (typeof availableBalance === "number") {
+      user.availableBalance = availableBalance;
+    }
+    if (typeof pendingBalance === "number") {
+      user.pendingBalance = pendingBalance;
     }
 
-    if (typeof amount !== "number" || amount <= 0) {
+    await user.save();
+
+    res.status(200).json({ message: "Saldo berhasil diupdate", user });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const withdrawBalance = async (req, res, next) => {
+  try {
+    const { amount } = req.body;
+    const userId = req.userId;
+
+    if (!amount || isNaN(amount) || amount <= 0) {
       return res.status(400).json({ message: "Jumlah penarikan tidak valid" });
     }
 
-    if (user.balance < amount) {
-      return res.status(400).json({ message: "Saldo tidak mencukupi" });
+    const orders = await Order.find({
+      sellerId: userId,
+      status: "completed",
+      isWithdrawn: { $ne: true },
+    });
+
+    const sortedOrders = orders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    let remaining = amount;
+    const updatedOrderIds = [];
+
+    for (const order of sortedOrders) {
+      const adminFee = order.adminFee ?? order.price * 0.02;
+      const netAmount = order.price - adminFee;
+
+      if (remaining >= netAmount) {
+        order.isWithdrawn = true;
+        await order.save();
+        remaining -= netAmount;
+        updatedOrderIds.push(order._id);
+      } else {
+        break;
+      }
     }
 
-    user.balance -= amount;
-    await user.save();
+    if (updatedOrderIds.length === 0) {
+      return res.status(400).json({ message: "Saldo tidak mencukupi atau tidak dapat ditarik" });
+    }
 
-    res.status(200).json({ message: "Penarikan berhasil", sisaSaldo: user.balance });
+    const amountWithdrawn = amount - remaining;
+
+    // ✅ Update availableBalance user
+    const user = await User.findById(userId);
+    if (user) {
+      user.availableBalance = (user.availableBalance ?? 0) - amountWithdrawn;
+      await user.save();
+    }
+
+    res.status(200).json({
+      message: "Penarikan berhasil",
+      amountWithdrawn,
+      withdrawnOrders: updatedOrderIds,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Gagal menarik saldo", error: err.message });
+    next(err);
   }
 };

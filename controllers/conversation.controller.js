@@ -3,6 +3,7 @@ import createError from "../utils/createError.js";
 import Conversation from "../models/conversation.model.js";
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
+import Order from "../models/order.model.js";
 import cloudinary from "cloudinary";
 import dotenv from "dotenv";
 dotenv.config();
@@ -12,34 +13,62 @@ cloudinary.v2.config({
   api_key: process.env.CLOUD_KEY,
   api_secret: process.env.CLOUD_SECRET,
 });
+
+
+
 // Create a new conversation
 export const createConversation = async (req, res, next) => {
   try {
-    const sellerId = new mongoose.Types.ObjectId(req.isSeller ? req.userId : req.body.to);
-    const buyerId = new mongoose.Types.ObjectId(req.isSeller ? req.body.to : req.userId);
+     console.log("📥 req.body:", req.body);
+    const sender = await User.findById(req.userId);
+    const receiver = await User.findById(req.body.to);
 
-    // Ambil data user untuk gambar
-    const seller = await User.findById(sellerId);
-    const buyer = await User.findById(buyerId);
+    if (!sender || !receiver) {
+      return next(createError(404, "Sender atau receiver tidak ditemukan"));
+    }
+
+    let sellerId, buyerId;
+
+    if (sender.isSeller) {
+      sellerId = sender._id;
+      buyerId = receiver._id;
+    } else if (receiver.isSeller) {
+      sellerId = receiver._id;
+      buyerId = sender._id;
+    } else {
+      // ✅ Admin dianggap sebagai pihak ketiga, bisa di-set sebagai buyer saja (opsional)
+      sellerId = receiver._id;
+      buyerId = sender._id;
+    }
+
+    const existing = await Conversation.findOne({ sellerId, buyerId });
+    if (existing) return res.status(200).send(existing);
+console.log("✅ Payload conversation:", {
+  sellerId,
+  buyerId,
+  orderId: req.body.orderId,
+});
 
     const newConversation = new Conversation({
       sellerId,
       buyerId,
-      sellerImg: seller?.img || "/img/noavatar.jpg",
-      buyerImg: buyer?.img || "/img/noavatar.jpg",
-      readBySeller: req.isSeller,
-      readByBuyer: !req.isSeller,
+      sellerImg: (await User.findById(sellerId))?.img || "/img/noavatar.jpg",
+      buyerImg: (await User.findById(buyerId))?.img || "/img/noavatar.jpg",
+      readBySeller: String(req.userId) === String(sellerId),
+      readByBuyer: String(req.userId) === String(buyerId),
+        orderId: req.body.orderId,
     });
 
     const savedConversation = await newConversation.save();
     res.status(201).send(savedConversation);
   } catch (err) {
     if (err.code === 11000) {
-      return next(createError(400, "Conversation already exists!"));
+      return next(createError(400, "Percakapan sudah ada"));
     }
     next(err);
   }
 };
+  
 // Update conversation (mark as read automatically)
 export const updateConversation = async (req, res, next) => {
   try {
@@ -109,7 +138,7 @@ export const deleteAllConversations = async (req, res, next) => {
 // Get a single conversation based on sellerId & buyerId
 export const getSingleConversation = async (req, res, next) => {
   try {
-    const { sellerId, buyerId } = req.query;
+    const { sellerId, buyerId, orderId } = req.query;
 
     if (!sellerId || !buyerId) {
       return next(createError(400, "sellerId and buyerId are required"));
@@ -120,27 +149,30 @@ export const getSingleConversation = async (req, res, next) => {
     }
 
     let conversation = await Conversation.findOne({
-      sellerId: new mongoose.Types.ObjectId(sellerId),
-      buyerId: new mongoose.Types.ObjectId(buyerId),
+      sellerId,
+      buyerId,
     })
       .populate('sellerId', 'username img')
-.populate('buyerId', 'username img')
+      .populate('buyerId', 'username img');
 
-
-    // Jika percakapan belum ada, buat percakapan baru
+    // ✅ Jika tidak ditemukan, buat baru HANYA jika orderId tersedia
     if (!conversation) {
-const seller = await User.findById(sellerId);
-const buyer = await User.findById(buyerId);
+      if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+        return next(createError(400, "Percakapan tidak ditemukan, dan orderId tidak dikirim untuk membuat baru."));
+      }
 
-conversation = new Conversation({
-  sellerId,
-  buyerId,
-  sellerImg: seller?.img || "/img/noavatar.jpg",
-  buyerImg: buyer?.img || "/img/noavatar.jpg",
-  readBySeller: false,
-  readByBuyer: false,
-});
+      const seller = await User.findById(sellerId);
+      const buyer = await User.findById(buyerId);
 
+      conversation = new Conversation({
+        sellerId,
+        buyerId,
+        orderId, // ✅ WAJIB
+        sellerImg: seller?.img || "/img/noavatar.jpg",
+        buyerImg: buyer?.img || "/img/noavatar.jpg",
+        readBySeller: false,
+        readByBuyer: false,
+      });
 
       await conversation.save();
     }
@@ -149,7 +181,7 @@ conversation = new Conversation({
       id: conversation._id,
       sellerId: conversation.sellerId?._id || sellerId,
       sellerUsername: conversation.sellerId?.username || "Seller",
-       sellerProfilePicture: conversation.sellerId?.img || "/img/noavatar.jpg",
+      sellerProfilePicture: conversation.sellerId?.img || "/img/noavatar.jpg",
       buyerId: conversation.buyerId?._id || buyerId,
       buyerUsername: conversation.buyerId?.username || "Buyer",
       buyerProfilePicture: conversation.buyerId?.img || "/img/noavatar.jpg",

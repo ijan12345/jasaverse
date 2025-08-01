@@ -123,6 +123,61 @@ export const deleteMessageForEveryone = async (req, res, next) => {
   }
 };
 
+
+export const getAverageResponseTime = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    const THIRTY_DAYS_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // Ambil semua percakapan (message) 30 hari terakhir
+    const allConversations = await Message.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: THIRTY_DAYS_AGO },
+        },
+      },
+      {
+        $group: {
+          _id: "$conversationId",
+          messages: { $push: "$$ROOT" }
+        }
+      }
+    ]);
+
+    let totalDiff = 0;
+    let count = 0;
+
+    for (const convo of allConversations) {
+      const messages = convo.messages.sort(
+        (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+      );
+
+      const buyerMsg = messages.find(m => m.userId !== userId);
+      const sellerReply = messages.find(m =>
+        m.userId === userId && new Date(m.createdAt) > new Date(buyerMsg?.createdAt)
+      );
+
+      if (buyerMsg && sellerReply) {
+        const diff = new Date(sellerReply.createdAt) - new Date(buyerMsg.createdAt);
+        totalDiff += diff;
+        count++;
+      }
+    }
+
+    if (count === 0) {
+      return res.json({ averageResponseTime: null });
+    }
+
+    const averageMs = totalDiff / count;
+    const averageMinutes = Math.round(averageMs / 60000);
+
+    res.json({ averageResponseTime: averageMinutes });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Get messages
 export const getMessages = async (req, res, next) => {
   try {

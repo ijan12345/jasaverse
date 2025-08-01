@@ -43,7 +43,7 @@ export const requestEwalletPayout = async ({
   ewallet_type
 }) => {
   const response = await axios.post(
-    "https://api.xendit.co/ewallets/charges",
+    "https://3ce08da500cc.ngrok-free.app/ewallets/charges",
     {
       reference_id: external_id,
       currency: "IDR",
@@ -52,7 +52,7 @@ export const requestEwalletPayout = async ({
       channel_code: `ID_${ewallet_type.toUpperCase()}`,
       channel_properties: {
         mobile_number: phone_number,
-        success_redirect_url: "https://example.com/success",
+        success_redirect_url: "https://3ce08da500cc.ngrok-free.app/Success",
       },
     },
     {
@@ -62,6 +62,52 @@ export const requestEwalletPayout = async ({
       },
     }
   );
+
+  return response.data;
+};
+// ✅ Membuat invoice untuk pembayaran customer (frontend WebView)
+export const createXenditInvoice = async ({
+  external_id,
+  payer_email,
+  amount,
+  description,
+  customer,
+  metadata = {},
+}) => {
+  // ✅ Logging sebelum request dikirim ke Xendit
+  console.log("📤 Sending invoice request:", {
+    external_id,
+    amount,
+    description,
+    customer,
+    metadata,
+  });
+
+ const response = await axios.post(
+  "https://api.xendit.co/v2/invoices",
+  {
+    external_id,
+    amount,
+    description,
+    payer_email, // ✅ wajib
+    invoice_duration: 86400,
+    currency: "IDR",
+    customer: {
+      email: payer_email, // ✅ wajib
+      given_names: customer?.given_names || "Customer",
+      mobile_number: customer?.mobile_number || "+6280000000000", // ✅ jangan kosong
+    },
+    success_redirect_url: "https://example.com/payment-success",
+    failure_redirect_url: "https://example.com/payment-failure",
+    metadata,
+  },
+  {
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+  }
+);
 
   return response.data;
 };
