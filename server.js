@@ -8,8 +8,10 @@ import { handleXenditWebhook } from "./controllers/withdrawal.controller.js";
 import orderRoute from "./routes/order.route.js";
 import conversationRoute from "./routes/conversation.route.js";
 import messageRoute from "./routes/message.route.js";
+import requestRoute from "./routes/request.route.js";
 import withdrawalRoute from "./routes/withdrawal.route.js"; // <--- Tambahkan ini
 import reviewRoute from "./routes/review.route.js";
+import offerRoute from "./routes/offer.route.js";
 import authRoute from "./routes/auth.route.js";
 import cookieParser from "cookie-parser";
 import "./cron/refundEscrowJob.js";
@@ -80,12 +82,14 @@ app.use("/api/webhook/xendit/invoice", (req, res, next) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   next();
 });
+app.use("/api/requests", requestRoute);
 app.post("/api/webhook/xendit/disbursement", handleXenditWebhook);
 app.use("/api/midtrans", midtransRoute);
 app.use("/api/admin", adminRoute);
 app.use("/api/otp", otpRoute);
 app.use("/api/disputes", disputeRoute);
 app.use("/api/auth", authRoute);
+app.use("/api/offers", offerRoute);
 app.use("/api/users", userRoute);
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/withdrawals", withdrawalRoute); // <--- Route endpoint untuk penarikan dana

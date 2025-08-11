@@ -1,11 +1,11 @@
 import Gig from "../models/gig.model.js";
-import Order from "../models/order.model.js";
 import Review from "../models/review.model.js";
 import createError from "../utils/createError.js";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import User from "../models/user.model.js"
 import cloudinary from "../utils/cloudinary.js";
+
 
 // Fungsi untuk membuat Gig
 export const createGig = async (req, res, next) => {
@@ -100,7 +100,11 @@ export const getGigs = async (req, res, next) => {
   const q = req.query;
 
   const filters = {
-    ...(q.userId && { userId: new mongoose.Types.ObjectId(q.userId) }),
+   ...(q.userId && mongoose.Types.ObjectId.isValid(q.userId) 
+  ? { userId: new mongoose.Types.ObjectId(q.userId) }
+  : {}
+),
+
     ...((q.min || q.max) && {
       price: {
         ...(q.min && { $gt: q.min }),
