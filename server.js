@@ -14,16 +14,16 @@ import reviewRoute from "./routes/review.route.js";
 import offerRoute from "./routes/offer.route.js";
 import authRoute from "./routes/auth.route.js";
 import cookieParser from "cookie-parser";
-import "./cron/refundEscrowJob.js";
-
+import rewardRoute from "./routes/reward.route.js";
 import cors from "cors";
 //import Stripe from "stripe";
-import midtransRoute from "./routes/midtrans.route.js";
+
 import adminRoute from "./routes/admin.route.js";
 import path from "path";
 import uploadRoutes from "./routes/upload.routes.js";
 import disputeRoute from './routes/dispute.route.js';
 import { fileURLToPath } from "url";
+import chatbotRoutes from "./routes/chatbot.route.js";
 import otpRoute from "./routes/otp.route.js";
 import sellerRoutes from "./routes/seller.route.js";
 import { createServer } from "http";         // <-- import http server
@@ -42,6 +42,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
+console.log("Groq key loaded:", process.env.GROQ_API_KEY?.slice(0, 10));
 
 // Load environment variables
 dotenv.config();
@@ -64,7 +65,7 @@ const connect = async () => {
 // Middlewares 
 app.use(cors({ 
   origin: [ "http://192.168.18.126:19000", // Your frontend address
-    "https://taskie.xyz",
+    "https://api.skillsap.xyz ",
   "http://localhost:5173"       // untuk Expo React Native
   ],
   credentials: true,               // Allow credentials like cookies
@@ -84,9 +85,11 @@ app.use("/api/webhook/xendit/invoice", (req, res, next) => {
 });
 app.use("/api/requests", requestRoute);
 app.post("/api/webhook/xendit/disbursement", handleXenditWebhook);
-app.use("/api/midtrans", midtransRoute);
+
 app.use("/api/admin", adminRoute);
 app.use("/api/otp", otpRoute);
+app.use("/api/chatbot", chatbotRoutes);
+app.use("/api/rewards", rewardRoute);
 app.use("/api/disputes", disputeRoute);
 app.use("/api/auth", authRoute);
 app.use("/api/offers", offerRoute);
@@ -100,6 +103,16 @@ app.use("/api/conversations", conversationRoute);
 app.use("/api/messages", messageRoute);
 app.use("/api/reviews", reviewRoute);
 app.use("/api/uploads/", express.static(path.join(__dirname, "uploads")));
+
+app.get("/api", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "Taskie Backend API",
+    version: "1.0.0",
+    message: "🚀 API is running smoothly!",
+  });
+});
+
 
 app.get('/', (req, res) => {
   res.send('Taskie backend running...');
@@ -123,11 +136,11 @@ const httpServer = createServer(app);
 
 // Initialize Socket.IO server
 const allowedOrigins = [
-  "https://taskie.xyz"
+  "https://api.skillsap.xyz "
 ];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: "*", // sementara biarkan terbuka dulu untuk testing
   credentials: true,
 }));
 
@@ -160,7 +173,8 @@ io.on("connection", (socket) => {
     console.log("User disconnected, socket ID:", socket.id);
   });
 });
-import "./cron/refundEscrowJob.js";
+
+
 // Start the server
 connect().then(() => {
   const PORT = process.env.PORT || 8800;

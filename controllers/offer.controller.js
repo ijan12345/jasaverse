@@ -11,23 +11,27 @@ export const createOffer = async (req, res) => {
     const gig = await Gig.findById(gigId);
     if (!gig) return res.status(404).json({ message: "Gig tidak ditemukan" });
 
-    // ✅ Cek apakah sudah pernah kirim penawaran untuk request ini
-    const existingOffer = await Offer.findOne({
-      requestId,
-      gigId,
-      sellerId: req.userId
-    });
-
-    if (existingOffer) {
+    // ✅ 1️⃣ Batasi maksimal 15 penawaran per request
+    const totalOffers = await Offer.countDocuments({ requestId });
+    if (totalOffers >= 15) {
       return res.status(400).json({
-        message:
-          existingOffer.status === "rejected"
-            ? "Penawaran Anda sebelumnya ditolak. Anda tidak bisa mengirim ulang."
-            : "Anda sudah mengirim penawaran untuk permintaan ini."
+        message: "Penawaran untuk permintaan ini sudah mencapai batas maksimal (15).",
       });
     }
 
-    // Kalau lolos, buat penawaran baru
+    // ✅ 2️⃣ Cek apakah seller sudah pernah mengirim penawaran untuk request ini
+    const sellerAlreadyOffered = await Offer.findOne({
+      requestId,
+      sellerId: req.userId,
+    });
+
+    if (sellerAlreadyOffered) {
+      return res.status(400).json({
+        message: "Kamu sudah mengirim penawaran untuk permintaan ini.",
+      });
+    }
+
+    // ✅ Kalau semua lolos, buat penawaran baru
     const newOffer = new Offer({
       requestId,
       gigId,
@@ -39,9 +43,11 @@ export const createOffer = async (req, res) => {
     await newOffer.save();
     res.status(201).json(newOffer);
   } catch (err) {
+    console.error("❌ Error createOffer:", err);
     res.status(500).json({ message: err.message });
   }
 };
+
 
 export const getMyGigs = async (req, res) => {
   try {

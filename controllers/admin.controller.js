@@ -32,7 +32,7 @@ export const getAdminDashboard = async (req, res, next) => {
 
     // Hitung total admin fee (gunakan field adminFee jika ada, fallback ke 2% dari harga)
     const totalAdminFee = orders.reduce((sum, order) => {
-      const fee = order.adminFee > 0 ? order.adminFee : order.price * 0.02;
+      const fee = order.adminFee > 0 ? order.adminFee : order.price * 0.12;
       return sum + fee;
     }, 0);
 
@@ -214,41 +214,4 @@ export const deleteGig = async (req, res, next) => {
     next(err);
   }
 };
-
-// =============================
-// 🔟 Promote User to Admin
-// =============================
-export const promoteToAdmin = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) return next(createError(404, "User not found!"));
-
-    user.role = "admin";
-    await user.save();
-
-    res.status(200).json({ message: "User promoted to admin", user });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// =============================
-// 1️⃣1️⃣ Demote Admin to User
-// =============================
-export const demoteAdmin = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) return next(createError(404, "User not found!"));
-
-    user.role = "buyer"; // Kembali jadi user biasa
-    await user.save();
-
-    res.status(200).json({ message: "Admin demoted to user", user });
-  } catch (err) {
-    next(err);
-  }
-};
-
-
-
 

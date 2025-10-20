@@ -13,8 +13,8 @@ const router = express.Router();
 
 router.post("/", verifyToken, createRequest);
 router.delete("/:id", verifyToken, deleteRequest);
-router.get("/all", getAllRequests);
-router.get("/single/:id", getRequestById); // ✅ ambil detail by ID
+router.get("/all", verifyToken, getAllRequests);
+router.get("/single/:id", verifyToken, getRequestById); // ✅ ambil detail by ID
 router.get("/", verifyToken, getRequests);
 
 export default router;

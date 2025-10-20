@@ -11,8 +11,6 @@ import {
   getGigById,
   updateGig,
   deleteGig,
-  promoteToAdmin,
-  demoteAdmin,
 } from "../controllers/admin.controller.js";
 // Import dari order controller jika belum
 
@@ -43,10 +41,6 @@ router.get("/gigs/:userId", verifyToken, verifyAdmin, getGigById); // Ambil gig 
 router.put("/gigs/:userId", verifyToken, verifyAdmin, updateGig); // Update gig
 router.delete("/gigs/:userId", verifyToken, verifyAdmin, deleteGig); // Hapus gig
 
-// =============================
-// 4️⃣ Pengelolaan Hak Admin
-// =============================
-router.put("/users/:id/promote", verifyToken, verifyAdmin, promoteToAdmin); // Jadikan admin
-router.put("/users/:id/demote", verifyToken, verifyAdmin, demoteAdmin); // Turunkan admin
+
 
 export default router;

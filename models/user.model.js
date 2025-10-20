@@ -15,15 +15,18 @@ const userSchema = new Schema(
     },
     password: {
       type: String,
-      required: true,
+      required: false,
     },
     img: {
       type: String,
       required: false,
     },
+    nimImage: { type: String, required: false },
+nimPublicId: { type: String },
+faculty: { type: String, required: false },
     imgPublicId: { type: String },
     cvPublicId: { type: String },
-    certificatePublicIds: [{ type: String }],
+   
     role: {
       type: String,
       enum: ["buyer", "seller", "admin"],
@@ -33,10 +36,11 @@ const userSchema = new Schema(
       type: [String],
       default: [],
     },
-    country: {
-      type: String,
-      required: true,
-    },
+   address: {
+  type: String,
+  required: false,
+},
+
     phone: {
       type: String,
       required: false,
@@ -53,10 +57,12 @@ const userSchema = new Schema(
       type: String,
       default: "",
     },
-    certificateImages: {
-      type: [String],
-      default: [],
-    },
+      // 🔹 Tambahkan field khusus sertifikat
+    certificatePKKMB: { type: String, default: "" },
+    certificatePKKMBPublicId: { type: String, default: "" },
+
+    certificateLDKM: { type: String, default: "" },
+    certificateLDKMPublicId: { type: String, default: "" },
     rank: {
       type: Number,
       default: 0,
@@ -68,6 +74,17 @@ const userSchema = new Schema(
     score: {
       type: Number,
       default: 0,
+      min: 0,
+    },
+        // 🔹 Tambahan untuk tracking seller
+    totalSales: {
+      type: Number,
+      default: 0, // total jasa terjual
+      min: 0,
+    },
+    sellerPoints: {
+      type: Number,
+      default: 0, // poin rank seller (posting + jualan)
       min: 0,
     },
     totalPurchases: {

@@ -22,15 +22,6 @@ dotenv.config({ path: './.env' });
 
 
 
-// Inisialisasi midtrans
-const midtrans = new midtransClient.Snap({
-  isProduction: false,
-  serverKey: process.env.MIDTRANS_SERVER_KEY,
-});
-
-
-
-
 // const IDR_TO_USD_CONVERSION_RATE = parseFloat(process.env.IDR_TO_USD_CONVERSION_RATE) || 15885;
 // const stripe = new Stripe(process.env.STRIPE);
 
@@ -253,16 +244,17 @@ export const updateProgressStatus = async (req, res, next) => {
     next(err);
   }
 };
+
 export const addExtraRequest = async (req, res, next) => {
   try {
-    const { description, amount, name, email, address } = req.body;
+    const { description, amount, name, email, phone, extraDays } = req.body;
     const { id } = req.params;
 
     if (!description || !amount) {
       return res.status(400).json({ message: "Deskripsi dan jumlah harus diisi" });
     }
 
-    const order = await Order.findById(id);
+    const order = await Order.findById(id).populate("gigId", "price deliveryTime");
     if (!order) return next(createError(404, "Order tidak ditemukan"));
 
     if (
@@ -272,9 +264,30 @@ export const addExtraRequest = async (req, res, next) => {
       return next(createError(403, "Anda tidak memiliki akses ke order ini"));
     }
 
+    // 🔒 Validasi batas harga
+    const maxTotalPrice = 10000000; // total maksimal 10 juta
+    const totalAfterExtra = order.price + Number(amount);
+    if (totalAfterExtra > maxTotalPrice) {
+      return res.status(400).json({
+        message: `Total harga tidak boleh lebih dari Rp ${maxTotalPrice.toLocaleString("id-ID")}`,
+      });
+    }
+
+    // 🔒 Validasi batas hari
+    const deliveryTime = order.gigId?.deliveryTime || 0;
+    const maxTotalDays = 20; // total maksimal 20 hari
+    const totalAfterExtraDays = deliveryTime + (Number(extraDays) || 0);
+    if (totalAfterExtraDays > maxTotalDays) {
+      return res.status(400).json({
+        message: `Total hari tidak boleh lebih dari ${maxTotalDays} (normal ${deliveryTime} + tambahan ${extraDays})`,
+      });
+    }
+
+    // Simpan ke order
     order.extraRequest = {
       description,
       amount,
+      extraDays: Number(extraDays) || 0,
       status: "pending",
     };
     order.progressStatus = "extra_revision_requested";
@@ -282,6 +295,7 @@ export const addExtraRequest = async (req, res, next) => {
 
     const extraOrderId = `EXTRA-${Date.now()}`;
 
+    // Buat invoice Xendit
     const invoice = await createXenditInvoice({
       external_id: extraOrderId,
       payer_email: email,
@@ -290,7 +304,7 @@ export const addExtraRequest = async (req, res, next) => {
       customer: {
         email,
         given_names: name,
-        mobile_number: address || "",
+        mobile_number: phone || "",
       },
       metadata: {
         gigId: String(order.gigId),
@@ -315,12 +329,14 @@ export const addExtraRequest = async (req, res, next) => {
   }
 };
 
+
+
 export const handleExtraPayment = async (req, res, next) => {
   try {
     const {
       name,
       email,
-      phone, // ✅ ganti dari address
+      phone,
       buyerId,
       sellerId,
       amount,
@@ -328,7 +344,7 @@ export const handleExtraPayment = async (req, res, next) => {
       relatedOrderId,
     } = req.body;
 
-    // Validasi data
+    // Validasi data dasar
     if (
       !name || !email || !phone ||
       !amount || !description ||
@@ -341,34 +357,59 @@ export const handleExtraPayment = async (req, res, next) => {
       return res.status(400).json({ message: "ID order terkait tidak valid" });
     }
 
+    // 🔎 Ambil order terkait
+    const relatedOrder = await Order.findById(relatedOrderId).populate("gigId", "price deliveryTime");
+    if (!relatedOrder) {
+      return res.status(404).json({ message: "Order terkait tidak ditemukan" });
+    }
+
+    // 🔒 Validasi batas harga
+    const maxTotalPrice = 10000000; // total maksimal 10 juta
+    const totalAfterExtra = relatedOrder.price + Number(amount);
+    if (totalAfterExtra > maxTotalPrice) {
+      return res.status(400).json({
+        message: `Total harga tidak boleh lebih dari Rp ${maxTotalPrice.toLocaleString("id-ID")}`,
+      });
+    }
+
+    // 🔒 Validasi batas hari
+    const deliveryTime = relatedOrder.gigId?.deliveryTime || 0;
+    const extraDaysExisting = relatedOrder.extraRequest?.extraDays || 0;
+    const maxTotalDays = 20;
+    const totalAfterExtraDays = deliveryTime + extraDaysExisting;
+    if (totalAfterExtraDays > maxTotalDays) {
+      return res.status(400).json({
+        message: `Total hari tidak boleh lebih dari ${maxTotalDays} (normal ${deliveryTime} + tambahan ${extraDaysExisting})`,
+      });
+    }
+
     const external_id = `EXTRA-${Date.now()}`;
 
-    // Kirim ke Xendit
-const invoice = await createXenditInvoice({
-  external_id,
-  amount: Number(amount),
-  description: `Extra Payment - ${description}`,
-  payer_email: email,
-  customer: {
-    given_names: name,
-    email,
-    mobile_number: phone,
-  },
-  metadata: {
-    gigId: null,
-    buyerId,
-    sellerId,
-    relatedOrderId,
-  },
-});
-
+    // ✅ Buat invoice ke Xendit
+    const invoice = await createXenditInvoice({
+      external_id,
+      amount: Number(amount),
+      description: `Extra Payment - ${description}`,
+      payer_email: email,
+      customer: {
+        given_names: name,
+        email,
+        mobile_number: phone,
+      },
+      metadata: {
+        gigId: null,
+        buyerId,
+        sellerId,
+        relatedOrderId,
+      },
+    });
 
     // Simpan mapping agar bisa dikenali di webhook
     await XenditMapping.create({
       external_id,
-      gigId: null, // jika tidak ada gig, bisa di-set null
+      gigId: null,
       buyerId,
-       relatedOrderId,
+      relatedOrderId,
       createdAt: new Date(),
     });
 
@@ -382,6 +423,7 @@ const invoice = await createXenditInvoice({
     res.status(500).json({ message: "Gagal memproses pembayaran tambahan" });
   }
 };
+
 
 export const getAdminRevenue = async (req, res) => {
   try {
@@ -448,7 +490,7 @@ export const handleXenditWebhook = async (req, res) => {
 
     const email = event.payer_email;
     const name = email?.split("@")[0] || "buyer";
-    const address = ""; // Tidak dikirim di webhook
+    const address = "default"; // Tidak dikirim di webhook
     const relatedOrderId = null; // default, hanya dipakai untuk EXTRA
 
     // ✅ HANDLE EXTRA PAYMENT
@@ -470,7 +512,7 @@ export const handleXenditWebhook = async (req, res) => {
         relatedOrder.extraRequest.status = "paid";
         relatedOrder.progressStatus = "extra_paid";
         relatedOrder.price += Number(relatedOrder.extraRequest.amount || 0);
-        relatedOrder.adminFee = Math.round(relatedOrder.price * 0.02 * 100) / 100;
+        relatedOrder.adminFee = Math.round(relatedOrder.price * 0.12 * 100) / 100;
         await relatedOrder.save();
         console.log(`✅ Extra request pada order ${mapping.relatedOrderId} ditandai sebagai 'paid'`);
       } else {
@@ -499,7 +541,7 @@ export const handleXenditWebhook = async (req, res) => {
           email,
           username: name,
           img: "",
-          country: "ID",
+          address: address || "Alamat tidak tersedia", // ✅ fallback aman
           isSeller: false,
         });
         console.log(`👤 User baru dibuat: ${user.username}`);
@@ -515,22 +557,27 @@ export const handleXenditWebhook = async (req, res) => {
     if (!order) {
       try {
         order = await Order.create({
-          gigId,
-          title: gig.title,
-          img: gig.cover,
-          price: gig.price,
-          sellerId: gig.userId,
-          buyerId,
-          status: "pending",
-          payment_intent: order_id,
-          customerEmail: email,
-          customerAddress: address,
-          customerName: name,
-          adminFee: Math.round(gig.price * 0.02 * 100) / 100,
-          isBalanceUpdated: false,
-          released: false,
-        });
-        console.log(`✅ Order ${order_id} dibuat dengan status pending`);
+  gigId,
+  title: gig.title,
+  img: gig.cover,
+  price: gig.price,
+  sellerId: gig.userId,
+  buyerId,
+  status: "pending",
+  payment_intent: order_id,
+  customerEmail: email,
+  customerAddress: address,
+  customerName: name,
+  adminFee: Math.round(gig.price * 0.12 * 100) / 100,
+  isBalanceUpdated: false,
+  released: false,
+
+  // 🔹 Tambahan penting agar revisi muncul
+  revisionLimit: gig.revisionNumber || 0, // ambil dari gig
+  usedRevisions: 0, // default awal
+});
+console.log(`✅ Order ${order_id} dibuat dengan revisionLimit = ${gig.revisionNumber}`);
+
       } catch (err) {
         console.error("❌ Gagal membuat order:", err.message);
         return res.status(500).json({ message: "Gagal membuat order" });
@@ -540,7 +587,7 @@ export const handleXenditWebhook = async (req, res) => {
     if (!order.isBalanceUpdated) {
       order.buyerId = order.buyerId || buyerId;
       order.customerName = name;
-      order.adminFee = Math.round(order.price * 0.02 * 100) / 100;
+      order.adminFee = Math.round(order.price * 0.12 * 100) / 100;
 
       const sellerRevenue = order.price - order.adminFee;
       const admin = await User.findOne({ role: "admin" });
@@ -617,15 +664,41 @@ export const deleteOrder = async (req, res, next) => {
  */
 export const getOrders = async (req, res, next) => {
   try {
-    const filter = req.isSeller ? { sellerId: req.userId } : { buyerId: req.userId };
+    const filter = req.isSeller
+      ? { sellerId: req.userId }
+      : { buyerId: req.userId };
+
     const orders = await Order.find(filter)
-      .populate("gigId", "title userId")
+      .populate("gigId", "title userId revisionNumber deliveryTime")
       .populate("buyerId", "username")
       .populate("sellerId", "username");
 
-    const ordersWithDeadline = orders.map(order => {
+    const ordersWithData = orders.map(order => {
       const orderData = order.toObject();
+      const gig = order.gigId;
 
+      // 🔹 Ambil data dari gig
+      const deliveryTime = gig?.deliveryTime || 0;
+      const revisionNumber = gig?.revisionNumber || 0;
+
+      // 🔹 Pastikan revisionLimit punya nilai fallback kuat
+      orderData.revisionLimit =
+        orderData.revisionLimit && orderData.revisionLimit > 0
+          ? orderData.revisionLimit
+          : revisionNumber;
+
+      // 🔹 Defaultkan usedRevisions kalau undefined
+      orderData.usedRevisions =
+        typeof orderData.usedRevisions === "number"
+          ? orderData.usedRevisions
+          : 0;
+
+      // 🔹 Simpan info gig tambahan biar bisa dipakai frontend
+      orderData.deliveryTime = deliveryTime;
+      orderData.revisionNumber = revisionNumber;
+      orderData.gigTitle = gig?.title || "Tanpa Judul";
+
+      // 🔹 Tambahkan batas waktu dispute
       if (orderData.dispute?.reportDate) {
         const deadline = new Date(orderData.dispute.reportDate);
         deadline.setHours(deadline.getHours() + 48);
@@ -635,39 +708,172 @@ export const getOrders = async (req, res, next) => {
       return orderData;
     });
 
-    res.status(200).json(ordersWithDeadline);
+    res.status(200).json(ordersWithData);
   } catch (err) {
+    console.error("❌ Error getOrders:", err);
     next(err);
   }
 };
+
+
+
+
 
 export const getOrderReceipt = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
       .populate("sellerId", "username")
-      .populate("buyerId", "username");
+      .populate("buyerId", "username")
+      .populate("gigId", "title deliveryTime revisionNumber userId");
 
     if (!order) {
       return res.status(404).json({ message: "Order tidak ditemukan" });
     }
 
     const orderData = order.toObject();
+    const gig = order.gigId;
 
+    // 🔹 Ambil data dari gig
+    const deliveryTime = gig?.deliveryTime || 0;
+    const revisionNumber = gig?.revisionNumber || 0;
+    const extraDays = Number(orderData.extraRequest?.extraDays || 0);
+
+    // 🔹 Hitung total hari dengan batas maksimal 20
+    const totalDays = Math.min(20, deliveryTime + extraDays);
+
+    // ✅ Tambahkan field revisi (dengan fallback kuat)
+    orderData.revisionLimit =
+      orderData.revisionLimit && orderData.revisionLimit > 0
+        ? orderData.revisionLimit
+        : revisionNumber; // fallback ke gig
+
+    orderData.usedRevisions = orderData.usedRevisions ?? 0;
+
+    // 🔹 Hitung deadline untuk dispute
     if (orderData.dispute?.reportDate) {
       const deadline = new Date(orderData.dispute.reportDate);
       deadline.setHours(deadline.getHours() + 48);
       orderData.dispute.deadline = deadline;
     }
 
-    res.status(200).json({
+    // 🔹 Pastikan gigId dikirim sebagai string dan sertakan data tambahan
+    if (orderData.gigId && typeof orderData.gigId === "object") {
+      orderData.gigTitle = orderData.gigId.title;
+      orderData.deliveryTime = orderData.gigId.deliveryTime;
+      orderData.revisionNumber = orderData.gigId.revisionNumber;
+      orderData.gigId = orderData.gigId._id;
+    }
+
+    // 🔹 Tambahkan total hari dan revisi ke response
+    orderData.deliveryTime = deliveryTime;
+    orderData.revisionNumber = revisionNumber;
+    orderData.totalDays = totalDays;
+    orderData.extraDays = extraDays;
+
+    console.log(
+      "🧾 revisionLimit:",
+      orderData.revisionLimit,
+      "usedRevisions:",
+      orderData.usedRevisions
+    );
+
+    return res.status(200).json({
       message: "Struk order berhasil diambil",
       order: orderData,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Gagal mengambil data struk order" });
+    console.error("❌ Gagal mengambil struk order:", err);
+    return res.status(500).json({ message: "Gagal mengambil data struk order" });
   }
 };
+
+
+// ✅ Buyer menyetujui atau menolak permintaan pengurangan revisi
+export const respondRevisionUse = async (req, res) => {
+  try {
+    const { approve } = req.body;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) return res.status(404).json({ message: "Order tidak ditemukan." });
+
+    // Inisialisasi properti jika belum ada
+    order.usedRevisions = order.usedRevisions ?? 0;
+    order.revisionLimit = order.revisionLimit ?? 0;
+    order.revisionRequest = order.revisionRequest || {};
+
+    // Hanya boleh merespons jika ada revisi pending
+    if (order.revisionRequest.status !== "pending") {
+      return res.status(400).json({ message: "Tidak ada permintaan revisi aktif." });
+    }
+
+    if (approve) {
+      if (order.usedRevisions >= order.revisionLimit) {
+        return res.status(400).json({ message: "Revisi sudah habis, tidak bisa dikurangi lagi." });
+      }
+
+      order.usedRevisions += 1;
+      order.revisionRequest.status = "accepted";
+    } else {
+      order.revisionRequest.status = "rejected";
+    }
+
+    await order.save();
+
+    res.status(200).json({
+      message: approve ? "Revisi dikurangi 1." : "Permintaan revisi ditolak.",
+      order,
+    });
+  } catch (err) {
+    console.error("❌ Error respondRevisionUse:", err);
+    res.status(500).json({ message: "Gagal memproses respon revisi." });
+  }
+};
+
+
+// ✅ Seller mengajukan permintaan pengurangan revisi
+export const requestRevisionUse = async (req, res) => {
+  try {
+    const { role } = req.body;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) return res.status(404).json({ message: "Order tidak ditemukan." });
+
+    // Inisialisasi nilai jika belum ada
+    order.usedRevisions = order.usedRevisions ?? 0;
+    order.revisionLimit = order.revisionLimit ?? 0;
+    order.revisionRequest = order.revisionRequest || {};
+
+    if (role !== "seller") {
+      return res.status(403).json({ message: "Hanya penjual yang dapat mengajukan revisi." });
+    }
+
+    if (order.revisionRequest.status === "pending") {
+      return res.status(400).json({ message: "Masih ada permintaan revisi yang belum disetujui." });
+    }
+
+    if (order.usedRevisions >= order.revisionLimit) {
+      return res.status(400).json({ message: "Semua revisi sudah digunakan." });
+    }
+
+    order.revisionRequest = {
+      from: "seller",
+      status: "pending",
+      date: new Date(),
+    };
+
+    await order.save();
+
+    res.status(200).json({
+      message: "Permintaan revisi dikirim ke pembeli.",
+      order,
+    });
+  } catch (err) {
+    console.error("❌ Error requestRevisionUse:", err);
+    res.status(500).json({ message: "Gagal mengirim permintaan revisi." });
+  }
+};
+
+
 
 /**
  * ✅ Mengambil earnings dari penjual berdasarkan ID
@@ -720,7 +926,7 @@ export const completeOrder = async (req, res, next) => {
       return next(createError(404, "Admin atau Seller tidak ditemukan"));
     }
 
-    const adminFee = order.adminFee ?? order.price * 0.02;
+    const adminFee = order.adminFee ?? order.price * 0.12;
     const sellerRevenue = order.price - adminFee;
 
     // ✅ Update saldo admin
@@ -729,22 +935,28 @@ export const completeOrder = async (req, res, next) => {
 
     // ✅ Update saldo seller
     seller.availableBalance = (seller.availableBalance ?? 0) + sellerRevenue;
+
+    // 🔹 Tambahkan histori penjualan permanen ke user
+    seller.totalSales = (seller.totalSales ?? 0) + 1;
+    seller.sellerPoints = (seller.sellerPoints ?? 0) + 9;
     await seller.save();
 
     console.log(`✅ Dana Rp${adminFee} masuk ke saldo Admin`);
     console.log(`✅ Dana Rp${sellerRevenue} masuk ke saldo Seller`);
+    console.log(`📈 Seller ${seller.username} dapat +1 totalSales & +9 poin`);
 
     // Tandai order selesai
     order.status = "completed";
     order.progressStatus = "delivered";
-    order.workCompletedAt = new Date(); // ⬅️ Catat waktu selesai kerja
+    order.workCompletedAt = new Date();
     order.escrowStatus = "released";
     order.escrowReleasedAt = new Date();
     order.released = true;
     await order.save();
-await deleteConversationsByOrderId(order._id);
 
-    // Tambah penjualan ke gig
+    await deleteConversationsByOrderId(order._id);
+
+    // (opsional) Tambah penjualan ke gig
     await Gig.findByIdAndUpdate(order.gigId, { $inc: { sales: 1 } });
 
     res.status(200).json({
@@ -755,6 +967,7 @@ await deleteConversationsByOrderId(order._id);
     next(err);
   }
 };
+
 
 export const reportDispute = async (req, res, next) => {
   try {
@@ -852,7 +1065,7 @@ export const resolveDispute = async (req, res, next) => {
       // ✅ Tambah saldo penjual & admin + hitung sales
       const seller = await User.findById(order.sellerId);
       const admin = await User.findOne({ role: "admin" });
-      const adminFee = order.adminFee ?? order.price * 0.02;
+      const adminFee = order.adminFee ?? order.price * 0.12;
       const sellerRevenue = order.price - adminFee;
 
       if (seller) {

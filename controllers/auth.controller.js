@@ -41,41 +41,57 @@ export const register = async (req, res, next) => {
   try {
     const { username, email, password, phone } = req.body;
 
-    // Validasi duplikat
+    // 🔒 Cek duplikat
     const existingUsername = await User.findOne({ username });
-    if (existingUsername) {
-      return next(createError(400, "Username sudah digunakan"));
-    }
+    if (existingUsername) return next(createError(400, "Username sudah digunakan"));
 
     const existingEmail = await User.findOne({ email });
-    if (existingEmail) {
-      return next(createError(400, "Email sudah terdaftar"));
-    }
+    if (existingEmail) return next(createError(400, "Email sudah terdaftar"));
 
     const existingPhone = await User.findOne({ phone });
-    if (existingPhone) {
-      return next(createError(400, "Nomor telepon sudah digunakan"));
-    }
+    if (existingPhone) return next(createError(400, "Nomor telepon sudah digunakan"));
 
-    // ✅ Cek apakah email diblacklist
+    // 🔒 Cek blacklist
     if (User.isEmailBlacklisted(email)) {
       return res.status(403).json({
         message: "Email ini diblokir oleh sistem. Silakan gunakan email lain.",
       });
     }
 
-    // Enkripsi password
+    // 🔑 Enkripsi password
     const hashedPassword = bcrypt.hashSync(password, 10);
 
-    // Role logic eksplisit
+    // Role logic
     const isSeller = req.body.role === "seller" || req.body.isSeller === true;
     const role = isSeller ? "seller" : "buyer";
 
+    // 🚀 Simpan field eksplisit
     const newUser = new User({
-      ...req.body,
+      username: req.body.username,
+      email: req.body.email,
       password: hashedPassword,
-      isSeller,
+      phone: req.body.phone,
+      address: req.body.address,
+      desc: req.body.desc,
+
+      img: req.body.img,
+      imgPublicId: req.body.imgPublicId,
+
+      nimImage: req.body.nimImage,
+      nimPublicId: req.body.nimPublicId,
+      faculty: req.body.faculty,
+
+      cvImage: req.body.cvImage,
+      cvPublicId: req.body.cvPublicId,
+
+      // 🔹 Field baru (PKKMB & LDKM)
+      certificatePKKMB: req.body.certificatePKKMB,
+      certificatePKKMBPublicId: req.body.certificatePKKMBPublicId,
+      certificateLDKM: req.body.certificateLDKM,
+      certificateLDKMPublicId: req.body.certificateLDKMPublicId,
+
       role,
+      isSeller,
       emailVerified: false,
     });
 
@@ -88,6 +104,7 @@ export const register = async (req, res, next) => {
     next(err);
   }
 };
+
 
 export const login = async (req, res, next) => {
   try {

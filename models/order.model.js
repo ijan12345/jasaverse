@@ -91,11 +91,17 @@ xenditInvoiceUrl: {
       type: Boolean,
       default: false,
     },
-    extraRequest: {
+extraRequest: {
   description: { type: String },
   amount: { type: Number },
-  status: { type: String, enum: ['pending', 'accepted', 'rejected', 'paid'], default: 'pending' },
+  extraDays: { type: Number, default: 0 }, // ✅ baru ditambahkan
+  status: {
+    type: String,
+    enum: ['pending', 'accepted', 'rejected', 'paid'],
+    default: 'pending'
+  },
 },
+
 dispute: {
   reportedBy: String, // buyerId
   reason: String,
@@ -106,6 +112,13 @@ dispute: {
   resolutionNote: String,
   resolvedBy: String, // adminId
   status: { type: String, enum: ['none', 'disputed', 'under_review', 'resolved'], default: 'none' },
+},
+usedRevisions: { type: Number, default: 0 },
+revisionLimit: { type: Number, default: 0 }, // jumlah revisi normal (misal 8)
+revisionRequest: {
+  from: { type: String, enum: ['seller', 'buyer'], default: 'seller' },
+  status: { type: String, enum: ['pending', 'accepted', 'rejected', 'none'], default: 'none' },
+  date: { type: Date },
 },
 workStartedAt: { type: Date },
 workCompletedAt: { type: Date },

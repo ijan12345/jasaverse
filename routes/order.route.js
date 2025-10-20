@@ -23,6 +23,7 @@ import {
   deleteOrderByAdmin,
   getAdminRevenue,
   deleteConversationsWithCompletedOrCanceledOrder,
+  requestRevisionUse, respondRevisionUse,
   handleXenditWebhook, // ✅ Tambahkan webhook Xendit
 } from "../controllers/order.controller.js";
 
@@ -43,6 +44,8 @@ router.get("/admin/revenue", verifyToken, verifyAdmin, getAdminRevenue);
 // 📌 PENGHASILAN
 router.get("/earnings/:userId", verifyToken, getEarnings); // GANTI dari /midtrans/earnings
 
+router.put("/:id/request-revision", verifyToken, requestRevisionUse);
+router.put("/:id/respond-revision", verifyToken, respondRevisionUse);
 // 📌 ORDER DAN EXTRA
 router.get("/", verifyToken, getOrders);
 router.get("/:id", verifyToken, getOrders);

@@ -7,7 +7,8 @@ import {
   getGigs,
   updateGig,
   getTotalSales,
-  getUserAverageRating
+  getUserAverageRating,
+  searchGig
 } from "../controllers/gig.controller.js";
 import validateGigUpdate from "../middleware/validation.js";
 import upload from "../middleware/uploadMiddleware.js";
@@ -19,7 +20,7 @@ const router = express.Router();
 // Route untuk membuat Gig  
 router.post("/", verifyToken, createGig);
 
-
+router.get("/search", searchGig);
 // Route untuk mendapatkan total penjualan berdasarkan userId
 router.get("/totalSales/:userId", verifyToken, getTotalSales);
 

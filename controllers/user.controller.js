@@ -77,6 +77,50 @@ export const deleteUser = async (req, res, next) => {
   }
 };
 
+
+// user.controller.js
+// 📊 GET /users/faculty-rank
+export const getFacultyRanks = async (req, res) => {
+  try {
+    // Ambil semua user yang punya fakultas
+    const users = await User.find({ faculty: { $exists: true, $ne: "" } });
+    const gigs = await Gig.find();
+    const orders = await Order.find({ status: "completed" });
+
+    // Map fakultas → total skor kumulatif
+    const facultyScores = {};
+
+    for (const user of users) {
+      // Semua gig & order dari seller ini
+      const userGigs = gigs.filter((g) => g.userId.toString() === user._id.toString());
+      const userOrders = orders.filter((o) => o.sellerId.toString() === user._id.toString());
+
+      const totalGigs = userGigs.length;
+      const totalSales = userOrders.length;
+      const score = totalSales * 9 + totalGigs; // 💡 sama persis seperti SellerScoresScreen
+
+      if (!facultyScores[user.faculty]) {
+        facultyScores[user.faculty] = 0;
+      }
+      facultyScores[user.faculty] += score;
+    }
+
+    // Ubah ke bentuk array dan urutkan
+    const rankedFaculties = Object.entries(facultyScores)
+      .map(([faculty, score]) => ({ faculty, score }))
+      .sort((a, b) => b.score - a.score)
+      .map((item, index) => ({ ...item, rank: index + 1 }));
+
+    res.status(200).json(rankedFaculties);
+  } catch (err) {
+    console.error("Error calculating faculty ranks:", err);
+    res.status(500).json({ message: "Error calculating faculty ranks" });
+  }
+};
+
+
+
+
 export const getUserBalance = async (req, res, next) => {
   try {
     const userId = req.params.id;
@@ -94,26 +138,64 @@ export const getUserBalance = async (req, res, next) => {
 export const changeEmail = async (req, res, next) => {
   try {
     const { email } = req.body;
+    const userId = req.params.id;
 
-    // Cek apakah user ada
-    const user = await User.findById(req.params.id);
+    // Cek user ada
+    const user = await User.findById(userId);
     if (!user) return next(createError(404, "User tidak ditemukan"));
 
-    // Cek email sudah digunakan belum
+    // Cek email sudah dipakai
     const existingEmail = await User.findOne({ email });
     if (existingEmail) return next(createError(400, "Email sudah digunakan"));
 
-    // Update email
+    // Update email, set verified false
     user.email = email;
     user.emailVerified = false;
     user.lastVerifiedAt = null;
     await user.save();
 
-    res.status(200).json({ message: "Email berhasil diubah" });
+    // Buat OTP verifikasi
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 menit
+
+    await OtpVerification.findOneAndUpdate(
+      { email, type: "verify" },
+      { code: otpCode, expiresAt },
+      { upsert: true, new: true }
+    );
+
+    // Kirim OTP ke email baru
+    await sendEmailOtp(email, otpCode);
+
+    res.status(200).json({
+      message: "Email berhasil diubah, OTP dikirim ke email baru",
+    });
   } catch (err) {
     next(err);
   }
 };
+
+// ✅ Cek ketersediaan username
+export const checkUsername = async (req, res, next) => {
+  try {
+    const { username } = req.params;
+
+    if (!username) {
+      return res.status(400).json({ available: false, message: "Username wajib diisi" });
+    }
+
+    const existingUser = await User.findOne({ username });
+
+    if (existingUser) {
+      return res.status(200).json({ available: false, message: "Username sudah digunakan" });
+    }
+
+    res.status(200).json({ available: true, message: "Username tersedia" });
+  } catch (err) {
+    next(err);
+  }
+};
+
 
 export const changePhone = async (req, res, next) => {
   try {
@@ -248,33 +330,38 @@ export const getSellerScores = async (req, res) => {
 
     // Ambil semua gigs milik seller
     const gigs = await Gig.find({ userId: id });
-    const gigIds = gigs.map(gig => gig._id);
+    const gigIds = gigs.map((gig) => gig._id);
 
-    // Hitung total penjualan dari semua gigs seller
-    const totalSales = await Order.countDocuments({ gigId: { $in: gigIds } });
+    // Hitung total penjualan berdasarkan order aktif (untuk tampilan)
+    const calculatedSales = await Order.countDocuments({ gigId: { $in: gigIds } });
 
     // Hitung jumlah gigs yang dimiliki
     const ownedGigsCount = gigIds.length;
 
-    // Hitung skor seller
-    const score = totalSales * 9 + ownedGigsCount * 1;
+    // Hitung skor seller (untuk leaderboard)
+    const score = calculatedSales * 9 + ownedGigsCount * 1;
 
-    // ✅ Simpan score ke database
+    // ✅ Simpan hanya score, tanpa ubah totalSales di database
     user.score = score;
     await user.save();
 
-    res.status(200).json({ 
-      userId: id, 
-      totalGigs: ownedGigsCount, 
-      totalSales, 
-      score 
+    // ✅ Kirim hasil hitung ke frontend tanpa mengubah database totalSales
+    res.status(200).json({
+      userId: id,
+      totalGigs: ownedGigsCount,
+      totalSales: user.totalSales, // tetap gunakan nilai di DB
+      calculatedSales, // tampilkan hasil hitung live
+      score,
     });
-
   } catch (err) {
     console.error("Error fetching seller score:", err.message);
-    res.status(500).json({ message: "Gagal mengambil skor seller", error: err.message });
+    res.status(500).json({
+      message: "Gagal mengambil skor seller",
+      error: err.message,
+    });
   }
 };
+
 
 export const getBuyerRank = async (req, res, next) => {
   try {
@@ -336,7 +423,7 @@ export const getUserRank = async (req, res) => {
         const ownedGigsCount = gigIds.length;
 
         // Hitung skor
-        const score = totalSales * 9 + ownedGigsCount * 4;
+        const score = totalSales * 9 + ownedGigsCount * 1;
 
         return {
           _id: seller._id,
@@ -395,19 +482,38 @@ export const getUserImages = async (req, res) => {
   }
 };
 
+export const getUserProfileFromToken = async (req, res, next) => {
+  try {
+    const userId = req.userId; // ambil dari token
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.status(200).json(user);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getUserProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id);
-    if (!user) {
-      return next(createError(404, "User not found"));
+    if (!user) return next(createError(404, "User not found"));
+
+    // 🔹 Hitung skor jika user adalah seller
+    if (user.isSeller) {
+      const gigs = await Gig.find({ userId: user._id });
+      const gigIds = gigs.map(g => g._id);
+      const totalSales = await Order.countDocuments({ gigId: { $in: gigIds }, status: "completed" });
+      const ownedGigsCount = gigIds.length;
+      user.score = totalSales * 9 + ownedGigsCount * 1; // logika sama seperti getUserRank
+      await user.save();
     }
 
-   res.status(200).json({
-  ...user._doc,
-  availableBalance: user.availableBalance,
-  pendingBalance: user.pendingBalance,
-});
-
+    res.status(200).json({
+      ...user._doc,
+      availableBalance: user.availableBalance,
+      pendingBalance: user.pendingBalance,
+    });
   } catch (err) {
     res.status(500).json({
       message: "Error retrieving user profile",
@@ -433,7 +539,7 @@ export const getUserEscrowBalance = async (req, res, next) => {
     });
 
     const earnings = completedOrders.reduce((total, order) => {
-      const adminFee = order.adminFee ?? order.price * 0.02; // 2% default fee
+      const adminFee = order.adminFee ?? order.price * 0.12; // 2% default fee
       return total + (order.price - adminFee);
     }, 0);
 
@@ -490,7 +596,7 @@ export const withdrawBalance = async (req, res, next) => {
     const updatedOrderIds = [];
 
     for (const order of sortedOrders) {
-      const adminFee = order.adminFee ?? order.price * 0.02;
+      const adminFee = order.adminFee ?? order.price * 0.12;
       const netAmount = order.price - adminFee;
 
       if (remaining >= netAmount) {

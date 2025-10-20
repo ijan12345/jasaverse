@@ -1,7 +1,7 @@
 import express from "express";
 import User from "../models/user.model.js";
 import { deleteUser, getSellerScores, getUser, saveUserImages, getUserImages, getUserProfile, getUserRank, updateBalance,changeEmail,
-  withdrawBalance,getUserBalance, changePhone, getBlacklistedEmails, addEmailToBlacklist, removeEmailFromBlacklist } from "../controllers/user.controller.js";
+  withdrawBalance,getUserBalance,getUserProfileFromToken, getFacultyRanks, changePhone, getBlacklistedEmails, checkUsername, addEmailToBlacklist, removeEmailFromBlacklist } from "../controllers/user.controller.js";
 import { verifyToken, verifyAdmin  } from "../middleware/jwt.js";
 import multer from "multer";
 import cloudinary from "../utils/cloudinary.js";
@@ -31,6 +31,8 @@ router.get("/admin/balance", verifyToken, verifyAdmin, async (req, res) => {
     res.status(500).json({ message: "Terjadi kesalahan saat mengambil saldo admin" });
   }
 });
+
+router.get("/me", verifyToken, getUserProfileFromToken);
 router.get("/:id/balance", verifyToken, getUserBalance);
 
 router.get("/userProfile/:id", getUserProfile); 
@@ -105,17 +107,20 @@ router.delete("/:id", verifyToken, deleteUser);
 router.get("/:id/rank", getUserRank);
 router.get("/:id/score", getSellerScores);
 router.put("/:id/images", saveUserImages);
+// 🔹 Endpoint ranking fakultas
+router.get("/faculty-rank", getFacultyRanks);
 router.get("/admin/blacklisted-emails", verifyToken, verifyAdmin, getBlacklistedEmails);
 router.post("/admin/blacklist-email", verifyToken, verifyAdmin, addEmailToBlacklist);
 router.delete("/admin/blacklist-email/:email", verifyToken, verifyAdmin, removeEmailFromBlacklist);
 router.put("/:id/change-email", verifyToken, changeEmail);
 router.get("/:id/images", getUserImages);
+router.get("/check-username/:username", checkUsername);
 router.put("/:id/change-phone", verifyToken, changePhone);
 router.put("/balance", verifyToken, verifyAdmin, updateBalance); // Admin mengatur saldo
 router.post("/balance/withdraw", verifyToken, withdrawBalance);  // Seller/admin tarik saldo
 // GET /users/:id/balance
 
-// ✅ GET saldo admin langsung berdasarkan role (bukan dari :id)
+
 
 router.get("/:id", getUser);
 

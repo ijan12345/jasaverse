@@ -18,7 +18,7 @@ const getAvailableEarnings = async (sellerId) => {
   });
 
   const totalEarnings = completedOrders.reduce((sum, order) => {
-    const adminFee = order.adminFee ?? order.price * 0.02;
+    const adminFee = order.adminFee ?? order.price * 0.12;
     return sum + (order.price - adminFee);
   }, 0);
 
@@ -154,7 +154,7 @@ if (sellerId === "admin" && user.isAdmin) {
       const orderIdsToUpdate = [];
 
       for (const order of eligibleOrders) {
-        const adminFee = order.adminFee ?? order.price * 0.02;
+        const adminFee = order.adminFee ?? order.price * 0.12;
         const netEarning = order.price - adminFee;
 
         if (accumulated + netEarning <= amount) {

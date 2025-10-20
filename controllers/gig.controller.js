@@ -1,29 +1,43 @@
 import Gig from "../models/gig.model.js";
 import Review from "../models/review.model.js";
+import Order from "../models/order.model.js";
 import createError from "../utils/createError.js";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import User from "../models/user.model.js"
 import cloudinary from "../utils/cloudinary.js";
+import { pipeline } from "@xenova/transformers";
+import { cosineSimilarity } from "../utils/similarity.js";
 
+let embedder;
+const getEmbedder = async () => {
+  if (!embedder) {
+    console.log("🧠 Loading semantic model: all-MiniLM-L6-v2 ...");
+    embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+    console.log("✅ Model loaded and cached in memory");
+  }
+  return embedder;
+};
 
-// Fungsi untuk membuat Gig
+// ✅ Fungsi untuk membuat Gig baru dengan embedding
 export const createGig = async (req, res, next) => {
   try {
-    const token = req.cookies.accessToken || req.headers.authorization?.split(" ")[1];
+    const token =
+      req.cookies.accessToken || req.headers.authorization?.split(" ")[1];
     if (!token) return next(createError(401, "You must be logged in"));
 
     const decoded = jwt.verify(token, process.env.JWT_KEY);
     req.userId = decoded.id;
 
-    if (!decoded.isSeller) return next(createError(403, "Only sellers can create a gig!"));
+    if (!decoded.isSeller)
+      return next(createError(403, "Only sellers can create a gig!"));
 
-    const {
-      cover,
-      coverPublicId,        // ✅ Terima dari frontend saat upload
-      images,
-      imagePublicIds,       // ✅ Terima dari frontend saat upload multiple
-    } = req.body;
+    const { title, desc, cover, coverPublicId, images, imagePublicIds } = req.body;
+
+    const embedder = await getEmbedder();
+    const text = `${title} ${desc}`;
+    const embeddingTensor = await embedder(text, { pooling: "mean", normalize: true });
+    const embeddingArray = Array.from(embeddingTensor.data);
 
     const newGig = new Gig({
       ...req.body,
@@ -32,15 +46,57 @@ export const createGig = async (req, res, next) => {
       coverPublicId,
       images,
       imagePublicIds,
+      embedding: embeddingArray,
     });
 
     const savedGig = await newGig.save();
+    await User.findByIdAndUpdate(req.userId, { $inc: { sellerPoints: 1 } });
+
     res.status(201).json(savedGig);
   } catch (err) {
+    console.error("Error in createGig:", err);
     next(err);
   }
 };
 
+
+// ✅ Fungsi pencarian semantic
+export const searchGig = async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) return res.status(400).json({ error: "Query is required" });
+
+    const embedder = await getEmbedder();
+    const queryEmbedding = await embedder(query, { pooling: "mean", normalize: true });
+
+    // Ambil hanya gig yang sudah punya embedding
+    const gigs = await Gig.find({ embedding: { $exists: true, $ne: [] } });
+
+    const scored = gigs.map((gig) => {
+      if (
+        Array.isArray(gig.embedding) &&
+        gig.embedding.length === queryEmbedding.data.length
+      ) {
+        return {
+          ...gig.toObject(),
+          score: cosineSimilarity(queryEmbedding.data, gig.embedding),
+        };
+      }
+      return { ...gig.toObject(), score: -1 };
+    });
+
+    // Filter hasil tidak relevan dan urutkan
+    const relevant = scored
+      .filter((g) => g.score > 0.3) // hanya hasil dengan similarity > 0.3
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10); // top 10 hasil terbaik
+
+    res.json(relevant);
+  } catch (err) {
+    console.error("Error in searchGig:", err);
+    res.status(500).json({ error: "Failed to search gigs" });
+  }
+};
 
 // Fungsi untuk menghapus Gig
 export const deleteGig = async (req, res, next) => {
@@ -51,27 +107,51 @@ export const deleteGig = async (req, res, next) => {
     const user = await User.findById(req.userId);
     if (!user) return next(createError(404, "User not found!"));
 
+    // 🔒 Cek otorisasi
     if (gig.userId.toString() !== req.userId.toString() && user.role !== "admin") {
       return next(createError(403, "You can only delete your own gig unless you are an admin!"));
     }
 
-    // ✅ Hapus gambar dari Cloudinary
+    // 🔹 Cek apakah gig punya order completed — jangan kurangi total penjualan
+    const completedOrders = await Order.find({ gigId: gig._id, status: "completed" });
+    if (completedOrders.length > 0) {
+      console.log(
+        `ℹ️ Gig "${gig.title}" memiliki ${completedOrders.length} order completed. Total penjualan tidak diubah.`
+      );
+    }
+
+    // ✅ Hapus gambar dari Cloudinary (jika ada)
     if (gig.coverPublicId) {
       await cloudinary.uploader.destroy(gig.coverPublicId);
     }
-
     if (gig.imagePublicIds && Array.isArray(gig.imagePublicIds)) {
       for (const publicId of gig.imagePublicIds) {
         await cloudinary.uploader.destroy(publicId);
       }
     }
 
+    // ✅ Hapus gig dari database
     await Gig.findByIdAndDelete(req.params.id);
-    res.status(200).send("Gig has been deleted!");
+
+    // ✅ Hitung ulang jumlah gig aktif milik user (setelah penghapusan)
+    const remainingGigs = await Gig.countDocuments({ userId: req.userId });
+
+    // ✅ Update data user: update jumlah jasa (tanpa ubah totalSales atau sellerPoints)
+    await User.findByIdAndUpdate(req.userId, {
+      $set: { ownedGigsCount: remainingGigs }, // misalnya kamu pakai ini untuk tampil di profil
+    });
+
+    res.status(200).send(
+      `Gig "${gig.title}" berhasil dihapus. Jumlah jasa seller diperbarui (${remainingGigs} tersisa).`
+    );
   } catch (err) {
+    console.error("Error deleteGig:", err);
     next(err);
   }
 };
+
+
+
 export const getGig = async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -209,7 +289,7 @@ const keywordToCategory = {
   salin: "Typing & Administration / Pengetikan & Administrasi",
   mengetik: "Typing & Administration / Pengetikan & Administrasi",
   spreadsheet: "Typing & Administration / Pengetikan & Administrasi",
-  resume: "Typing & Administration / Pengetikan & Administrasi",
+  CV: "Typing & Administration / Pengetikan & Administrasi",
   dataentry: "Typing & Administration / Pengetikan & Administrasi",
   pengarsipan: "Typing & Administration / Pengetikan & Administrasi",
   laporan: "Typing & Administration / Pengetikan & Administrasi",
