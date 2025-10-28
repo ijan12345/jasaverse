@@ -65,7 +65,7 @@ const connect = async () => {
 // Middlewares 
 app.use(cors({ 
   origin: [ "http://192.168.18.126:19000", // Your frontend address
-    "https://api.skillsap.xyz ",
+    "https://api.skillsap.xyz",
   "http://localhost:5173"       // untuk Expo React Native
   ],
   credentials: true,               // Allow credentials like cookies

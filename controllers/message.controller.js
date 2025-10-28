@@ -179,47 +179,25 @@ export const getAverageResponseTime = async (req, res, next) => {
 };
 
 // Get messages
+// message.controller.js
+
 export const getMessages = async (req, res, next) => {
   try {
-    const { id: conversationId } = req.params;
+    const messages = await Message.find({ conversationId: req.params.id });
 
-    // Cek apakah conversationId valid
-    if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
-      return res.status(400).json({ message: "Invalid conversationId" });
-    }
-
-    // Ambil pesan dari conversationId
-    const messages = await Message.find({
-  conversationId,
-  $or: [
-    { userId: req.userId, deletedBySender: { $ne: true } },
-    { userId: { $ne: req.userId }, deletedByReceiver: { $ne: true } }
-  ]
-});
-
-
-    // Jika tidak ada pesan, kirim array kosong agar tidak error
-    if (!messages || messages.length === 0) {
-      return res.status(200).json([]); // Kirim array kosong tanpa error
-    }
-
-    // Tandai pesan sebagai telah dibaca jika bukan milik user sendiri
-    const updatedMessages = await Promise.all(
-      messages.map(async (message) => {
-        if (!message.read && String(message.userId) !== String(req.userId)) {
-          return await Message.findByIdAndUpdate(
-            message._id,
-            { read: true },
-            { new: true }
-          );
-        }
-        return message;
-      })
+    // ❗ INI BAGIAN YANG MENYEBABKAN KONFLIK
+    await Message.updateMany(
+      { 
+        conversationId: req.params.id, 
+        read: false, 
+        userId: { $ne: req.userId } 
+      },
+      { $set: { read: true } }
     );
 
-    res.status(200).json(updatedMessages); // Kirim pesan yang telah diperbarui
+    res.status(200).send(messages);
   } catch (err) {
-    next(err); // Tangani error
+    next(err);
   }
 };
 

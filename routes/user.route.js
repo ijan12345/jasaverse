@@ -1,6 +1,6 @@
 import express from "express";
 import User from "../models/user.model.js";
-import { deleteUser, getSellerScores, getUser, saveUserImages, getUserImages, getUserProfile, getUserRank, updateBalance,changeEmail,
+import { deleteUser,getSellerLevelInfo, getSellerLeaderboard, getSellerScores, getUser, saveUserImages, getUserImages, getUserProfile, getUserRank, updateBalance,changeEmail,
   withdrawBalance,getUserBalance,getUserProfileFromToken, getFacultyRanks, changePhone, getBlacklistedEmails, checkUsername, addEmailToBlacklist, removeEmailFromBlacklist } from "../controllers/user.controller.js";
 import { verifyToken, verifyAdmin  } from "../middleware/jwt.js";
 import multer from "multer";
@@ -34,7 +34,7 @@ router.get("/admin/balance", verifyToken, verifyAdmin, async (req, res) => {
 
 router.get("/me", verifyToken, getUserProfileFromToken);
 router.get("/:id/balance", verifyToken, getUserBalance);
-
+router.get("/:id/level-info", verifyToken, getSellerLevelInfo);
 router.get("/userProfile/:id", getUserProfile); 
 // 🧹 Endpoint untuk hapus gambar dari Cloudinary
 router.post("/cloudinary/delete", verifyToken, async (req, res) => {
@@ -108,6 +108,7 @@ router.get("/:id/rank", getUserRank);
 router.get("/:id/score", getSellerScores);
 router.put("/:id/images", saveUserImages);
 // 🔹 Endpoint ranking fakultas
+router.get("/sellers/leaderboard", getSellerLeaderboard);
 router.get("/faculty-rank", getFacultyRanks);
 router.get("/admin/blacklisted-emails", verifyToken, verifyAdmin, getBlacklistedEmails);
 router.post("/admin/blacklist-email", verifyToken, verifyAdmin, addEmailToBlacklist);

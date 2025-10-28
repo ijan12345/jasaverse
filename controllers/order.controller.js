@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 //import Stripe from "stripe";
 import dotenv from "dotenv";
 import cron from 'node-cron';
-import midtransClient from "midtrans-client";
+import nodemailer from "nodemailer";
 import User from "../models/user.model.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
@@ -13,6 +13,8 @@ import { io } from "../server.js";
 import cloudinary from "cloudinary"; // pastikan sudah diimport
 import { createXenditInvoice } from "../services/xendit.services.js";
 import XenditMapping from "../models/XenditMapping.js"; // <-- tambahkan ini di ata
+import { checkAndUpdateSellerLevel } from "./user.controller.js";
+
 
 
 
@@ -89,6 +91,79 @@ export const intent = async (req, res, next) => {
     next(err);
   }
 };
+
+
+
+export const sendDeliveryEmail = async (req, res) => {
+  try {
+    const { id } = req.params; // orderId
+    const { subject, message, attachmentUrl } = req.body;
+
+    // ✅ Ambil order lengkap + populate user
+    const order = await Order.findById(id)
+      .populate("buyerId", "email username")
+      .populate("sellerId", "email username");
+
+    if (!order) return res.status(404).json({ message: "Order tidak ditemukan" });
+
+    // 🧩 Deteksi otomatis jika buyerId/sellerId bukan ObjectId murni
+    let buyer = order.buyerId;
+    let seller = order.sellerId;
+
+    // kalau masih object penuh, ambil ID-nya
+    if (typeof buyer === "object" && !buyer.email) {
+      buyer = await User.findById(buyer._id);
+    } else if (typeof buyer !== "object") {
+      buyer = await User.findById(buyer);
+    }
+
+    if (typeof seller === "object" && !seller.email) {
+      seller = await User.findById(seller._id);
+    } else if (typeof seller !== "object") {
+      seller = await User.findById(seller);
+    }
+
+    if (!buyer?.email) return res.status(400).json({ message: "Email pembeli tidak ditemukan." });
+    if (!seller?.email) return res.status(400).json({ message: "Email penjual tidak ditemukan." });
+
+    // ✅ Siapkan transporter email (pakai Gmail misalnya)
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER, // pastikan .env diisi
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    // ✅ Kirim email
+    const mailOptions = {
+      from: `"${seller.username}" <${process.env.EMAIL_USER}>`,
+      to: buyer.email,
+      subject: subject || `Hasil Pekerjaan Pesanan #${order._id}`,
+      html: `
+        <div style="font-family: sans-serif; color: #333;">
+          <p>Halo <b>${buyer.username}</b>,</p>
+          <p>${message || "Berikut hasil pekerjaan Anda dari penjual SkillSap."}</p>
+          ${
+            attachmentUrl
+              ? `<p>📎 Unduh hasil pekerjaan di sini:<br/><a href="${attachmentUrl}">${attachmentUrl}</a></p>`
+              : ""
+          }
+          <p>Salam hangat,<br/><b>${seller.username}</b></p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    console.log(`✅ Email terkirim ke ${buyer.email} dari ${seller.email}`);
+    res.status(200).json({ message: `Email berhasil dikirim ke ${buyer.email}` });
+  } catch (err) {
+    console.error("❌ Gagal kirim email:", err);
+    res.status(500).json({ message: "Gagal mengirim email", error: err.message });
+  }
+};
+
 export const deleteConversationsWithCompletedOrCanceledOrder = async (req, res, next) => {
   try {
     const orders = await Order.find({ status: { $in: ["completed", "canceled"] } });
@@ -955,6 +1030,9 @@ export const completeOrder = async (req, res, next) => {
     await order.save();
 
     await deleteConversationsByOrderId(order._id);
+    // 🔹 Cek apakah seller memenuhi syarat naik level
+await checkAndUpdateSellerLevel(order.sellerId);
+
 
     // (opsional) Tambah penjualan ke gig
     await Gig.findByIdAndUpdate(order.gigId, { $inc: { sales: 1 } });

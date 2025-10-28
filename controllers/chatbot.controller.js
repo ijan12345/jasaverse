@@ -9,6 +9,12 @@ import Fuse from "fuse.js";
 const faqID = {
   "Order & Transaksi": [
     { q: "Cara daftar jadi penjual?", a: "Buka halaman login → klik 'Daftar disini' → pilih 'Daftar sebagai Penjual' → selesai." },
+{
+  q: "Bagaimana cara kerja tombol 'Kirim Project' di SkillSap?",
+  a: "Tombol 'Kirim Project' berfungsi untuk mengirim hasil akhir proyek langsung ke pembeli melalui email (Gmail) setelah order selesai dikerjakan.\n\n📩 **Langkah penggunaan:**\n1. Pastikan status order Anda sudah mencapai tahap penyelesaian (selesai atau siap kirim).\n2. Tekan tombol **'Kirim Project'** pada halaman order.\n3. Sistem akan otomatis membuka aplikasi Gmail dengan format email yang sudah diisi otomatis, berisi:\n   - Nama pembeli,\n   - ID order,\n   - Pesan pengantar profesional,\n   - Petunjuk agar pembeli memeriksa file hasil kerja.\n4. Anda hanya perlu menambahkan **file hasil proyek** (misalnya '.zip', '.pdf', '.docx', '.png', dll) sebelum menekan tombol **Kirim** di Gmail.\n\n⚠️ **Penting untuk Penjual:**\n- Pastikan **file proyek sudah dilampirkan** sebelum mengirim email.\n- Jika Anda lupa melampirkan file, kirim ulang email yang sama dengan file yang benar.\n- Jangan kirim informasi sensitif di luar sistem SkillSap.\n\n🛠️ **Tentang Revisi & Permintaan Tambahan:**\n- Jika pembeli masih memiliki **kuota revisi**, Anda dapat mengajukan revisi melalui menu 'Ajukan Revisi'.\n- Jika pembeli meminta tambahan di luar revisi (misal fitur baru, halaman tambahan, atau aset ekstra), gunakan fitur **Permintaan Tambahan (Extra Request)** agar pembeli dapat melakukan pembayaran tambahan langsung di aplikasi.\n- Setelah semua revisi dan tambahan selesai, Anda dapat kembali menekan tombol **Kirim Project** untuk mengirim hasil final.\n\n💬 **Catatan untuk Pembeli:**\n- Jika belum menerima file proyek setelah menerima email ini, mohon balas email tersebut untuk mengingatkan penjual agar segera melampirkan hasil kerja.\n- SkillSap merekomendasikan komunikasi sopan dan profesional antara pembeli dan penjual. 🤝\n\nTerima kasih telah menggunakan SkillSap Marketplace! 🚀"
+},
+
+
     { q: "Bagaimana cara membuat pesanan?", a: "Pilih jasa → tekan tombol 'Beli Sekarang' → isi data → pilih metode pembayaran → jika sukses, order muncul di menu Order." },
     { q: "Apa yang terjadi setelah order dibuat?", a: "Order akan berstatus 'pending'. Seller harus menerima order. Jika tidak merespons dalam 30 hari, sistem otomatis melakukan refund." },
     { q: "Bagaimana cara penjual menerima atau menolak order?", a: "Penjual buka menu Order → pilih order → klik 'Terima Layanan' atau 'Tolak Order'. Jika ditolak, dana dikembalikan ke buyer." },
@@ -34,6 +40,34 @@ const faqID = {
   ],
 
   "Profil & Akun": [
+    {
+  q: "Apa itu sistem Level & Slot Gig di SkillSap?",
+  a: "Sistem Level di SkillSap menentukan berapa banyak gig (jasa) yang bisa dibuat oleh penjual berdasarkan pencapaian mereka. Setiap level memberi jumlah slot gig permanen yang lebih banyak. Contohnya, Level 1 memiliki 3 slot gig, Level 2 memiliki 7 slot gig, dan Level 3 memiliki 10 slot gig.",
+},
+{
+  q: "Bagaimana cara naik level penjual?",
+  a: "Level naik otomatis setelah penjual memenuhi syarat tertentu. Misalnya, untuk naik ke Level 2, penjual harus menyelesaikan minimal 5 order dengan rating rata-rata di atas 4.7. Untuk Level 3, minimal 20 order dengan rating di atas 4.8. Setiap kali order selesai dan diberi rating, sistem akan otomatis mengecek apakah Anda layak naik level.",
+},
+{
+  q: "Apakah slot gig bisa berkurang jika performa saya menurun?",
+  a: "Tidak. Slot gig adalah hadiah permanen atas pencapaian Anda. Jika performa atau rating turun, Anda hanya kehilangan status atau badge (misalnya 'Penjual Terpercaya'), tetapi slot gig tetap Anda miliki.",
+},
+{
+  q: "Apa yang terjadi jika saya turun rating di bawah batas level?",
+  a: "Status badge Anda akan hilang sementara (misalnya tidak lagi tampil sebagai 'Penjual Terpercaya'), tetapi slot gig tetap sama. Sistem pencarian juga akan otomatis menurunkan visibilitas gig Anda hingga performa membaik.",
+},
+{
+  q: "Kapan sistem mengecek kenaikan level?",
+  a: "Setiap kali sebuah order diselesaikan dan diberi rating oleh pembeli, sistem otomatis mengevaluasi syarat kenaikan level tanpa perlu tindakan manual dari admin.",
+},
+{
+  q: "Apa manfaat naik level di SkillSap?",
+  a: "Selain menambah jumlah slot gig yang bisa Anda buat, level yang lebih tinggi juga meningkatkan kepercayaan buyer, membuka peluang tampil di hasil pencarian atas, dan memberi badge eksklusif seperti 'Penjual Terpercaya' atau 'Penjual Elite'.",
+},
+{
+  q: "Berapa level maksimum saat ini di SkillSap?",
+  a: "Saat ini, SkillSap memiliki 3 level utama: Level 1 (3 slot gig), Level 2 (7 slot gig), dan Level 3 (10 slot gig). Namun, sistem ini fleksibel dan akan diperluas di masa depan hingga Level 4 atau lebih.",
+},
     { q: "Bagaimana cara mengganti nomor telepon?", a: "Buka Profil → klik ikon pensil di Nomor Telepon → masukkan nomor baru → simpan." },
     { q: "Bagaimana cara mengubah deskripsi profil?", a: "Buka Profil → klik ikon pensil di Deskripsi → edit teks → simpan." },
     { q: "Bagaimana cara mengganti foto profil?", a: "Buka Profil → tekan foto → pilih gambar dari galeri → simpan." },
@@ -137,6 +171,11 @@ const faqID = {
  */
 const faqEN = {
   "Orders & Transactions": [
+{
+  q: "How does the 'Send Project' button work in SkillSap?",
+  a: "The 'Send Project' button allows sellers to send the final project directly to the buyer via Gmail after completing the order.\n\n📩 **How to use it:**\n1. Make sure your order status is ready for delivery (completed or awaiting submission).\n2. Press the **'Send Project'** button on the order page.\n3. The system will automatically open Gmail with a pre-filled message containing:\n   - Buyer’s name,\n   - Order ID,\n   - A polite introduction,\n   - Instructions for the buyer to check the attached files.\n4. You just need to **attach your project files** (e.g. '.zip', '.pdf', '.docx', '.png', etc.) before pressing **Send** in Gmail.\n\n⚠️ **Important for Sellers:**\n- Always ensure the **final project file is attached** before sending.\n- If you forget to attach files, simply resend the same email with the correct files.\n- Do not include sensitive personal information outside the SkillSap platform.\n\n🛠️ **Regarding Revisions & Extra Requests:**\n- If the buyer still has **revision quota**, you may submit a revision request via the 'Request Revision' menu.\n- If the buyer requests additional features or pages beyond the revision scope, submit an **Extra Request** so the buyer can approve and pay the additional fee directly in the app.\n- Once all revisions and extras are completed, press **'Send Project'** again to deliver the final result.\n\n💬 **Note for Buyers:**\n- If you haven’t received the project file after getting this email, kindly reply to the seller as a reminder.\n- SkillSap encourages polite and professional communication between both parties. 🤝\n\nThank you for using SkillSap Marketplace! 🚀"
+},
+
     { q: "How do I register as a seller?", a: "Go to the login page → click 'Register here' → choose 'Register as Seller' → done." },
     { q: "How do I place an order?", a: "Select a service → press 'Buy Now' → fill in your details → choose a payment method → once successful, the order will appear in the Orders menu." },
     { q: "What happens after I create an order?", a: "Your order will have a 'pending' status. The seller must accept it. If not accepted within 30 days, the system automatically issues a refund." },
@@ -163,6 +202,35 @@ const faqEN = {
   ],
 
   "Profile & Account": [
+    {
+  q: "What is the Level & Gig Slot system in SkillSap?",
+  a: "The Level system in SkillSap determines how many gigs (services) a seller can create based on their achievements. Each level permanently unlocks more gig slots. For example, Level 1 has 3 gig slots, Level 2 has 7 gig slots, and Level 3 has 10 gig slots.",
+},
+{
+  q: "How can a seller level up?",
+  a: "Levels increase automatically once the seller meets certain requirements. For example, to reach Level 2, the seller must complete at least 5 orders with an average rating above 4.7. For Level 3, at least 20 orders with an average rating above 4.8 are required. Each time an order is completed and rated, the system automatically checks eligibility for the next level.",
+},
+{
+  q: "Can my gig slots decrease if my performance drops?",
+  a: "No. Gig slots are a permanent reward for your past achievements. If your performance or rating decreases, you only lose your status or badge (e.g., 'Trusted Seller'), but your unlocked gig slots remain the same.",
+},
+{
+  q: "What happens if my rating drops below the level threshold?",
+  a: "Your badge or status (such as 'Trusted Seller') will be temporarily removed, but your gig slots remain unchanged. The search algorithm will automatically lower your gig visibility until your performance improves.",
+},
+{
+  q: "When does the system check for level upgrades?",
+  a: "Every time an order is completed and rated by a buyer, the system automatically evaluates whether you meet the criteria for a level upgrade — no admin action required.",
+},
+{
+  q: "What are the benefits of leveling up in SkillSap?",
+  a: "Higher levels allow you to create more gigs, increase buyer trust, improve your visibility in search results, and unlock exclusive badges such as 'Trusted Seller' or 'Elite Seller'.",
+},
+{
+  q: "What is the current maximum level in SkillSap?",
+  a: "Currently, SkillSap has 3 main levels: Level 1 (3 gig slots), Level 2 (7 gig slots), and Level 3 (10 gig slots). However, the system is flexible and may expand to Level 4 or higher in future updates.",
+},
+
     { q: "How do I change my phone number?", a: "Go to Profile → click the pencil icon next to Phone Number → enter the new number → save." },
     { q: "How do I edit my profile description?", a: "Go to Profile → click the pencil icon next to Description → edit → save." },
     { q: "How do I change my profile photo?", a: "Go to Profile → tap your photo → select an image from your gallery → save." },

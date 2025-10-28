@@ -11,11 +11,6 @@ import cloudinary from "../utils/cloudinary.js";
 import Conversation from "../models/conversation.model.js";
 import Blacklist from "../models/blacklist.model.js"; // ❗ INI HARUS ADA
 
-
-
-
-
-
 // Fungsi untuk mendapatkan daftar pengguna (hanya untuk admin)
 export const getAllUsers = async (req, res) => {
   try {
@@ -29,6 +24,108 @@ export const getAllUsers = async (req, res) => {
     res.status(200).json(users);
   } catch (err) {
     res.status(500).json({ message: "Gagal mengambil daftar pengguna", error: err });
+  }
+};
+export const checkAndUpdateSellerLevel = async (sellerId) => {
+  const seller = await User.findById(sellerId);
+  if (!seller || !seller.isSeller) return;
+
+  const completedOrders = await Order.countDocuments({
+    sellerId,
+    status: "completed",
+  });
+
+  const reviews = await Review.find({ sellerId });
+  const avgRating =
+    reviews.length > 0
+      ? reviews.reduce((acc, r) => acc + r.star, 0) / reviews.length
+      : 0;
+
+  seller.totalCompletedOrders = completedOrders;
+  seller.averageRating = avgRating;
+
+  // 🎯 Aturan naik level
+  if (seller.level === 1 && completedOrders >= 5 && avgRating >= 4.7) {
+    seller.level = 2;
+    seller.unlockedSlots = Math.max(seller.unlockedSlots, 7);
+    seller.statusBadge = "Penjual Terpercaya";
+  } else if (seller.level === 2 && completedOrders >= 20 && avgRating >= 4.8) {
+    seller.level = 3;
+    seller.unlockedSlots = Math.max(seller.unlockedSlots, 10);
+    seller.statusBadge = "Penjual Elite";
+  } else if (avgRating < 4.0) {
+    seller.statusBadge = null; // kehilangan badge tapi slot tetap
+  }
+
+  await seller.save();
+};
+
+export const getSellerLeaderboard = async (req, res) => {
+  try {
+    // 1. Ambil semua data mentah yang relevan
+    //    .lean() membuatnya lebih cepat karena hanya mengambil data JSON
+    const users = await User.find({ isSeller: true })
+      .select("_id username img")
+      .lean();
+      
+    const gigs = await Gig.find().select("userId").lean();
+    const orders = await Order.find({ status: "completed" })
+      .select("sellerId")
+      .lean();
+
+    // 2. Ubah data mentah menjadi Peta (Map) untuk pencarian cepat
+    //    Ini jauh lebih cepat daripada query database di dalam loop
+    
+    const gigCounts = {}; // Peta: userId -> jumlah gig
+    for (const gig of gigs) {
+      const userId = gig.userId.toString();
+      gigCounts[userId] = (gigCounts[userId] || 0) + 1;
+    }
+
+    const orderCounts = {}; // Peta: sellerId -> jumlah order
+    for (const order of orders) {
+      const sellerId = order.sellerId.toString();
+      orderCounts[sellerId] = (orderCounts[sellerId] || 0) + 1;
+    }
+
+    // 3. Proses data di memori server
+    const processedSellers = users.map((user) => {
+      const userId = user._id.toString();
+      
+      const totalGigs = gigCounts[userId] || 0;
+      const totalSales = orderCounts[userId] || 0;
+      const score = totalSales * 9 + totalGigs; // Logika skor Anda
+
+      return {
+        userId: user._id,
+        username: user.username,
+        profileImage: user.img || "https://via.placeholder.com/28",
+        totalSales,
+        totalGigs,
+        score,
+      };
+    });
+
+    // 4. Urutkan, ambil 5 teratas, dan kirim
+    const sortedSellers = processedSellers
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5); // Hanya kirim 5 teratas
+
+    res.status(200).json(sortedSellers);
+  } catch (err) {
+    console.error("Error in getSellerLeaderboard:", err);
+    res.status(500).json({ message: "Gagal memuat leaderboard" });
+  }
+};
+export const getSellerLevelInfo = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select(
+      "level unlockedSlots totalCompletedOrders averageRating statusBadge"
+    );
+    if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
+    res.status(200).json(user);
+  } catch (err) {
+    res.status(500).json({ message: "Gagal mengambil info level", error: err.message });
   }
 };
 

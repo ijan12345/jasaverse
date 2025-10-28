@@ -32,6 +32,28 @@ faculty: { type: String, required: false },
       enum: ["buyer", "seller", "admin"],
       default: "buyer",
     },
+    // 🎯 Sistem Level & Slot Gig
+level: {
+  type: Number,
+  default: 1, // Level awal
+},
+unlockedSlots: {
+  type: Number,
+  default: 3, // 3 gig di level 1
+},
+totalCompletedOrders: {
+  type: Number,
+  default: 0,
+},
+averageRating: {
+  type: Number,
+  default: 0,
+},
+statusBadge: {
+  type: String,
+  default: null, // misal "Penjual Terpercaya"
+},
+
     permissions: {
       type: [String],
       default: [],

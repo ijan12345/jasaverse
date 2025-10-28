@@ -12,7 +12,7 @@ export const requestBankPayout = async ({
   bank_code,
   account_holder_name,
   account_number,
-  description
+  description,
 }) => {
   const response = await axios.post(
     "https://api.xendit.co/disbursements",
@@ -31,7 +31,6 @@ export const requestBankPayout = async ({
       },
     }
   );
-
   return response.data;
 };
 
@@ -40,10 +39,10 @@ export const requestEwalletPayout = async ({
   external_id,
   amount,
   phone_number,
-  ewallet_type
+  ewallet_type,
 }) => {
   const response = await axios.post(
-    "https://3ce08da500cc.ngrok-free.app/ewallets/charges",
+    "https://api.xendit.co/ewallets/charges",
     {
       reference_id: external_id,
       currency: "IDR",
@@ -52,7 +51,8 @@ export const requestEwalletPayout = async ({
       channel_code: `ID_${ewallet_type.toUpperCase()}`,
       channel_properties: {
         mobile_number: phone_number,
-        success_redirect_url: "https://3ce08da500cc.ngrok-free.app/Success",
+        success_redirect_url: "https://api.skillsap.com/api/orders/payment-success",
+        failure_redirect_url: "https://api.skillsap.com/api/orders/payment-failure",
       },
     },
     {
@@ -62,10 +62,10 @@ export const requestEwalletPayout = async ({
       },
     }
   );
-
   return response.data;
 };
-// ✅ Membuat invoice untuk pembayaran customer (frontend WebView)
+
+// 🧾 Membuat invoice untuk pembayaran customer (frontend WebView)
 export const createXenditInvoice = async ({
   external_id,
   payer_email,
@@ -74,7 +74,6 @@ export const createXenditInvoice = async ({
   customer,
   metadata = {},
 }) => {
-  // ✅ Logging sebelum request dikirim ke Xendit
   console.log("📤 Sending invoice request:", {
     external_id,
     amount,
@@ -83,31 +82,32 @@ export const createXenditInvoice = async ({
     metadata,
   });
 
- const response = await axios.post(
-  "https://api.xendit.co/v2/invoices",
-  {
-    external_id,
-    amount,
-    description,
-    payer_email, // ✅ wajib
-    invoice_duration: 86400,
-    currency: "IDR",
-    customer: {
-      email: payer_email, // ✅ wajib
-      given_names: customer?.given_names || "Customer",
-      mobile_number: customer?.mobile_number || "+6280000000000", // ✅ jangan kosong
+  const response = await axios.post(
+    "https://api.xendit.co/v2/invoices",
+    {
+      external_id,
+      amount,
+      description,
+      payer_email,
+      invoice_duration: 86400,
+      currency: "IDR",
+      customer: {
+        email: payer_email,
+        given_names: customer?.given_names || "Customer",
+        mobile_number: customer?.mobile_number || "+6280000000000",
+      },
+      // ✅ gunakan redirect ke halaman web yang kamu buat
+      success_redirect_url: "https://api.skillsap.com/api/orders/payment-success",
+      failure_redirect_url: "https://api.skillsap.com/api/orders/payment-failure",
+      metadata,
     },
-    success_redirect_url: "https://example.com/payment-success",
-    failure_redirect_url: "https://example.com/payment-failure",
-    metadata,
-  },
-  {
-    headers: {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-    },
-  }
-);
+    {
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+    }
+  );
 
   return response.data;
 };

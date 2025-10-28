@@ -165,17 +165,40 @@ export const deleteReview = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-export const likeReview = async (req, res) => {
+export const likeReview = async (req, res, next) => {
   try {
     const review = await Review.findById(req.params.id);
     if (!review) {
-      return res.status(404).json({ success: false, message: "Review not found" });
+      return next(createError(404, "Review not found")); // Konsisten pakai next()
     }
 
-    const userId = req.userId.toString();
+    const gigId = review.gigId; // Ambil gigId dari review
+
+    // --- LOGIKA VALIDASI BARU (SAMA SEPERTI createReview) ---
+    // 1. Cek apakah user adalah pembeli dengan order aktif
+    const validOrder = await Order.findOne({
+      gigId: gigId,
+      buyerId: req.userId, // <-- PERBAIKAN (menggunakan req.userId ObjectId)
+      status: { $in: ["pending", "in_progress", "accepted"] },
+    });
+
+    // 2. Cek apakah user adalah pemilik gig
+    const gig = await Gig.findById(gigId);
+    if (!gig) {
+      return next(createError(404, "Gig terkait review ini tidak ditemukan"));
+    }
+    const isOwner = gig.userId.toString() === req.userId.toString();
+
+    // 3. Hanya boleh lanjut jika pembeli aktif atau pemilik gig
+    if (!validOrder && !isOwner) {
+      return next(createError(403, "❌ Hanya pembeli aktif atau pemilik gig yang dapat like/dislike"));
+    }
+    // --- AKHIR LOGIKA VALIDASI ---
+
+    const userId = req.userId.toString(); // Baru ubah ke string untuk logika like/dislike
     let message = "";
 
-    if (review.likedUsers.includes(userId)) {
+    if (review.likedUsers.map(id => id.toString()).includes(userId)) {
       // Jika sudah like, maka unlike
       review.likedUsers = review.likedUsers.filter(id => id.toString() !== userId);
       review.likes -= 1;
@@ -183,30 +206,53 @@ export const likeReview = async (req, res) => {
     } else {
       // Hapus dari dislikedUsers jika ada
       review.dislikedUsers = review.dislikedUsers.filter(id => id.toString() !== userId);
-      review.likedUsers.push(userId);
+      review.likedUsers.push(req.userId); // Push ObjectId
       review.likes += 1;
-      review.dislikes = review.dislikedUsers.length; // Pastikan dislikes dihitung ulang
+      review.dislikes = review.dislikedUsers.length; 
       message = "Review liked";
     }
 
     await review.save();
     res.status(200).json({ success: true, message, review });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Server error" });
+    next(err); 
   }
 };
 
-export const dislikeReview = async (req, res) => {
+export const dislikeReview = async (req, res, next) => {
   try {
     const review = await Review.findById(req.params.id);
     if (!review) {
-      return res.status(404).json({ success: false, message: "Review not found" });
+      return next(createError(404, "Review not found")); // Konsisten pakai next()
     }
 
-    const userId = req.userId.toString();
+    const gigId = review.gigId; // Ambil gigId dari review
+
+    // --- LOGIKA VALIDASI BARU (SAMA SEPERTI createReview) ---
+    // 1. Cek apakah user adalah pembeli dengan order aktif
+    const validOrder = await Order.findOne({
+      gigId: gigId,
+      buyerId: req.userId, // <-- PERBAIKAN (menggunakan req.userId ObjectId)
+      status: { $in: ["pending", "in_progress", "accepted"] },
+    });
+
+    // 2. Cek apakah user adalah pemilik gig
+    const gig = await Gig.findById(gigId);
+    if (!gig) {
+      return next(createError(404, "Gig terkait review ini tidak ditemukan"));
+    }
+    const isOwner = gig.userId.toString() === req.userId.toString();
+
+    // 3. Hanya boleh lanjut jika pembeli aktif atau pemilik gig
+    if (!validOrder && !isOwner) {
+      return next(createError(403, "❌ Hanya pembeli aktif atau pemilik gig yang dapat like/dislike"));
+    }
+    // --- AKHIR LOGIKA VALIDASI ---
+
+    const userId = req.userId.toString(); // Baru ubah ke string untuk logika like/dislike
     let message = "";
 
-    if (review.dislikedUsers.includes(userId)) {
+    if (review.dislikedUsers.map(id => id.toString()).includes(userId)) {
       // Jika sudah dislike, maka undislike
       review.dislikedUsers = review.dislikedUsers.filter(id => id.toString() !== userId);
       review.dislikes -= 1;
@@ -214,15 +260,15 @@ export const dislikeReview = async (req, res) => {
     } else {
       // Hapus dari likedUsers jika ada
       review.likedUsers = review.likedUsers.filter(id => id.toString() !== userId);
-      review.dislikedUsers.push(userId);
+      review.dislikedUsers.push(req.userId); // Push ObjectId
       review.dislikes += 1;
-      review.likes = review.likedUsers.length; // Pastikan likes dihitung ulang
+      review.likes = review.likedUsers.length; 
       message = "Review disliked";
     }
 
     await review.save();
     res.status(200).json({ success: true, message, review });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Server error" });
+    next(err); 
   }
 };

@@ -15,7 +15,7 @@ export const sendEmailOtp = async (email, code) => {
   });
 
   const mailOptions = {
-    from: `"Jasaverse" <${process.env.EMAIL_USER}>`,
+    from: `"SkillSap" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: "Kode OTP Verifikasi Email",
     html: `<p>Berikut kode OTP verifikasi Anda:</p><h2>${code}</h2><p>Berlaku selama 5 menit.</p>`,
