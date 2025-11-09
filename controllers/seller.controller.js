@@ -19,20 +19,26 @@ export const getSellerScores = async (req, res) => {
         const gigs = await Gig.find({ userId: sellerId });
         const gigIds = gigs.map((gig) => gig._id);
 
-        // Hitung sales hanya untuk tampilan live
+        // Hitung sales aktif (live)
         const calculatedSales = await Order.countDocuments({
           gigId: { $in: gigIds },
           status: "completed",
         });
 
-        // Ambil total sales seumur hidup dari database user
-        const totalSales = seller.totalSales ?? 0;
+        // ==========================================================
+        // ✅ PERUBAHAN 1: Ambil 'lifetimeSales' dari DB
+        // (Mengganti 'seller.totalSales' menjadi 'seller.lifetimeSales'
+        // agar konsisten dengan fungsi leaderboard Anda sebelumnya)
+        // ==========================================================
+        const lifetimeSales = seller.lifetimeSales ?? 0;
 
         // Hitung jumlah gigs yang dimiliki
         const ownedGigsCount = gigIds.length;
 
-        // Skor live berdasarkan calculatedSales (bukan totalSales dari DB)
-        const score = calculatedSales * 9 + ownedGigsCount;
+        // ==========================================================
+        // ✅ PERUBAHAN 2: Hitung skor pakai 'lifetimeSales'
+        // ==========================================================
+        const score = lifetimeSales * 9 + ownedGigsCount;
 
         return {
           _id: seller._id,
@@ -40,9 +46,10 @@ export const getSellerScores = async (req, res) => {
           username: seller.username,
           profileImage: seller.img || "/img/default-profile.png",
           totalGigs: ownedGigsCount,
-          totalSales,        // pakai lifetime totalSales dari DB
-          calculatedSales,   // tambahkan nilai live agar frontend bisa bedakan
-          score,
+          totalSales: lifetimeSales, // Kirim 'lifetimeSales' sebagai 'totalSales'
+          lifetimeSales: lifetimeSales, // Kirim juga agar jelas (opsional)
+          calculatedSales, // tetap kirim sales aktif jika perlu
+          score,           // Skor baru berbasis lifetime
         };
       })
     );

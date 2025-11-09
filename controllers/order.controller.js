@@ -543,6 +543,7 @@ await deleteConversationsByOrderId(order._id);
 
 export const handleXenditWebhook = async (req, res) => {
   console.log("📩 Webhook payload:", JSON.stringify(req.body, null, 2));
+
   try {
     const event = req.body;
     const order_id = event?.external_id;
@@ -553,7 +554,9 @@ export const handleXenditWebhook = async (req, res) => {
       return res.status(200).send("Dilewati");
     }
 
-    // ✅ Ambil metadata dari DB (karena tidak dikirim oleh webhook)
+    // ==========================================================
+    // 🔹 AMBIL METADATA
+    // ==========================================================
     const mapping = await XenditMapping.findOne({ external_id: order_id });
     if (!mapping) {
       console.error("❌ Mapping metadata tidak ditemukan untuk external_id:", order_id);
@@ -562,13 +565,13 @@ export const handleXenditWebhook = async (req, res) => {
 
     const gigId = mapping.gigId;
     const buyerIdFromXendit = mapping.buyerId;
-
-    const email = event.payer_email;
+    const email = event.payer_email?.toLowerCase();
     const name = email?.split("@")[0] || "buyer";
-    const address = "default"; // Tidak dikirim di webhook
-    const relatedOrderId = null; // default, hanya dipakai untuk EXTRA
+    const address = "default";
 
-    // ✅ HANDLE EXTRA PAYMENT
+    // ==========================================================
+    // 🔹 PEMBAYARAN TAMBAHAN (EXTRA)
+    // ==========================================================
     if (order_id.startsWith("EXTRA-")) {
       console.log("🔄 Pembayaran tambahan (extra-request) terdeteksi");
 
@@ -589,7 +592,8 @@ export const handleXenditWebhook = async (req, res) => {
         relatedOrder.price += Number(relatedOrder.extraRequest.amount || 0);
         relatedOrder.adminFee = Math.round(relatedOrder.price * 0.12 * 100) / 100;
         await relatedOrder.save();
-        console.log(`✅ Extra request pada order ${mapping.relatedOrderId} ditandai sebagai 'paid'`);
+
+        console.log(`✅ Extra request pada order ${mapping.relatedOrderId} ditandai 'paid'`);
       } else {
         console.warn(`⚠️ Order ${mapping.relatedOrderId} tidak memiliki extraRequest`);
       }
@@ -597,7 +601,9 @@ export const handleXenditWebhook = async (req, res) => {
       return res.status(200).json({ message: "Pembayaran tambahan berhasil diproses" });
     }
 
-    // ✅ HANDLE PEMBAYARAN ORDER UTAMA
+    // ==========================================================
+    // 🔹 PEMBAYARAN ORDER UTAMA
+    // ==========================================================
     if (!gigId || !mongoose.Types.ObjectId.isValid(gigId)) {
       console.error("❌ gigId tidak ditemukan atau tidak valid");
       return res.status(400).json({ message: "gigId tidak valid" });
@@ -609,61 +615,73 @@ export const handleXenditWebhook = async (req, res) => {
       return res.status(404).json({ message: "Gig tidak ditemukan" });
     }
 
-    let user = await User.findOne({ email });
-    if (!user && email) {
+    // ==========================================================
+    // ✅ CARI ATAU BUAT USER TANPA DUPLIKAT
+    // ==========================================================
+    let user = await User.findOne({
+      $or: [{ email }, { username: name }],
+    });
+
+    if (!user) {
       try {
         user = await User.create({
           email,
           username: name,
           img: "",
-          address: address || "Alamat tidak tersedia", // ✅ fallback aman
+          address: address || "Alamat tidak tersedia",
           isSeller: false,
         });
         console.log(`👤 User baru dibuat: ${user.username}`);
       } catch (err) {
-        console.error("❌ Gagal membuat user:", err.message);
+        if (err.code === 11000) {
+          // ✅ Jika race condition, ambil user yang sudah ada
+          user = await User.findOne({ $or: [{ email }, { username: name }] });
+          console.log(`👤 Duplikat terdeteksi, pakai user lama: ${user.username}`);
+        } else {
+          console.error("❌ Gagal membuat user:", err.message);
+          return res.status(500).json({ message: "Gagal membuat user" });
+        }
       }
+    } else {
+      console.log(`👤 User sudah ada: ${user.username}`);
     }
 
     const buyerId = buyerIdFromXendit || user?._id || null;
 
-
+    // ==========================================================
+    // ✅ CEGAH ORDER DUPLIKAT
+    // ==========================================================
     let order = await Order.findOne({ payment_intent: order_id });
+
     if (!order) {
-      try {
-        order = await Order.create({
-  gigId,
-  title: gig.title,
-  img: gig.cover,
-  price: gig.price,
-  sellerId: gig.userId,
-  buyerId,
-  status: "pending",
-  payment_intent: order_id,
-  customerEmail: email,
-  customerAddress: address,
-  customerName: name,
-  adminFee: Math.round(gig.price * 0.12 * 100) / 100,
-  isBalanceUpdated: false,
-  released: false,
+      order = await Order.create({
+        gigId,
+        title: gig.title,
+        img: gig.cover,
+        price: gig.price,
+        sellerId: gig.userId,
+        buyerId,
+        status: "pending",
+        payment_intent: order_id,
+        customerEmail: email,
+        customerAddress: address,
+        customerName: name,
+        adminFee: Math.round(gig.price * 0.12 * 100) / 100,
+        isBalanceUpdated: false,
+        released: false,
+        revisionLimit: gig.revisionNumber || 0,
+        usedRevisions: 0,
+      });
 
-  // 🔹 Tambahan penting agar revisi muncul
-  revisionLimit: gig.revisionNumber || 0, // ambil dari gig
-  usedRevisions: 0, // default awal
-});
-console.log(`✅ Order ${order_id} dibuat dengan revisionLimit = ${gig.revisionNumber}`);
-
-      } catch (err) {
-        console.error("❌ Gagal membuat order:", err.message);
-        return res.status(500).json({ message: "Gagal membuat order" });
-      }
+      console.log(`✅ Order ${order_id} dibuat dengan revisionLimit = ${gig.revisionNumber}`);
+    } else {
+      console.log(`ℹ️ Order ${order_id} sudah ada di database`);
     }
 
+    // ==========================================================
+    // ✅ UPDATE SALDO HANYA SEKALI
+    // ==========================================================
     if (!order.isBalanceUpdated) {
-      order.buyerId = order.buyerId || buyerId;
-      order.customerName = name;
-      order.adminFee = Math.round(order.price * 0.12 * 100) / 100;
-
       const sellerRevenue = order.price - order.adminFee;
       const admin = await User.findOne({ role: "admin" });
       const seller = await User.findById(order.sellerId);
@@ -671,12 +689,11 @@ console.log(`✅ Order ${order_id} dibuat dengan revisionLimit = ${gig.revisionN
       if (admin && seller) {
         admin.pendingBalance = (admin.pendingBalance || 0) + order.adminFee;
         seller.pendingBalance = (seller.pendingBalance || 0) + sellerRevenue;
-
         await admin.save();
         await seller.save();
 
-        console.log(`💰 Admin pendingBalance ditambah: ${order.adminFee}`);
-        console.log(`💰 Seller pendingBalance ditambah: ${sellerRevenue}`);
+        console.log(`💰 Admin pendingBalance +${order.adminFee}`);
+        console.log(`💰 Seller pendingBalance +${sellerRevenue}`);
       }
 
       order.isBalanceUpdated = true;
@@ -686,8 +703,11 @@ console.log(`✅ Order ${order_id} dibuat dengan revisionLimit = ${gig.revisionN
       console.log(`ℹ️ Order ${order_id} sudah diproses & saldo ditandai`);
     }
 
+    // ==========================================================
+    // ✅ RESPON SUKSES
+    // ==========================================================
     return res.status(200).json({
-      message: "Order berhasil diproses dan saldo ditampung dalam pendingBalance",
+      message: "✅ Order berhasil diproses & saldo ditampung dalam pendingBalance",
       buyerId,
     });
   } catch (err) {
@@ -695,6 +715,7 @@ console.log(`✅ Order ${order_id} dibuat dengan revisionLimit = ${gig.revisionN
     res.status(500).json({ message: "Gagal memproses webhook" });
   }
 };
+
 
 
 
@@ -723,27 +744,76 @@ export const rejectExtraRequest = async (req, res, next) => {
 export const deleteOrder = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) return next(createError(400, "Format Order ID tidak valid"));
 
-    const order = await Order.findByIdAndDelete(id);
+    if (!mongoose.Types.ObjectId.isValid(id))
+      return next(createError(400, "Format Order ID tidak valid"));
+
+    const order = await Order.findById(id);
     if (!order) return next(createError(404, "Pesanan tidak ditemukan"));
 
-    res.status(200).json({ message: "Pesanan berhasil dihapus" });
+    // 🔐 Identifikasi user
+    const isBuyer = String(order.buyerId) === String(req.userId);
+    const isSeller = String(order.sellerId) === String(req.userId);
+
+    if (!isBuyer && !isSeller)
+      return next(createError(403, "Anda tidak berhak menghapus pesanan ini"));
+
+    // Pastikan field sudah ada
+    if (order.buyerDeleted === undefined) order.buyerDeleted = false;
+    if (order.sellerDeleted === undefined) order.sellerDeleted = false;
+
+    // 🧩 Update flag sesuai siapa yang hapus
+    if (isBuyer) order.buyerDeleted = true;
+    if (isSeller) order.sellerDeleted = true;
+
+    // Simpan dulu perubahan flag
+    await order.save();
+
+    // 🔍 Jika keduanya sudah menghapus, hapus order dari database
+    if (order.buyerDeleted && order.sellerDeleted) {
+      await deleteConversationsByOrderId(order._id);
+
+      // ⚙️ Kurangi totalSales seller, tapi lifetimeSales tetap
+      const seller = await User.findById(order.sellerId);
+      if (seller) {
+        if (seller.totalSales && seller.totalSales > 0) {
+          seller.totalSales = Math.max(0, seller.totalSales - 1);
+        }
+        // ❌ Jangan ubah lifetimeSales dan score
+        await seller.save();
+      }
+
+      await Order.findByIdAndDelete(order._id);
+      console.log(`🗑️ Order ${order._id} dihapus permanen (kedua pihak sudah hapus).`);
+
+      return res.status(200).json({
+        message: "Pesanan berhasil dihapus.",
+      });
+    }
+
+    // Jika baru salah satu yang hapus → hanya disembunyikan
+    res.status(200).json({
+      message:
+        "Pesanan berhasil dihapus.",
+    });
   } catch (err) {
     next(err);
   }
 };
+
+
+
 
 /**
  * ✅ Mengambil daftar order berdasarkan user (buyer/seller)
  */
 export const getOrders = async (req, res, next) => {
   try {
-    const filter = req.isSeller
-      ? { sellerId: req.userId }
-      : { buyerId: req.userId };
+      const baseFilter = req.isSeller
+      ? { sellerId: req.userId, sellerDeleted: { $ne: true } }
+      : { buyerId: req.userId, buyerDeleted: { $ne: true } };
 
-    const orders = await Order.find(filter)
+    const orders = await Order.find(baseFilter)
       .populate("gigId", "title userId revisionNumber deliveryTime")
       .populate("buyerId", "username")
       .populate("sellerId", "username");
@@ -987,6 +1057,7 @@ export const completeOrder = async (req, res, next) => {
     const order = await Order.findById(id);
     if (!order) return next(createError(404, "Order tidak ditemukan"));
 
+    // 🔒 Hanya buyer yang boleh menyelesaikan order
     if (!order.buyerId || order.buyerId.toString() !== req.userId) {
       return next(createError(403, "Hanya pembeli yang bisa menyelesaikan order ini"));
     }
@@ -1001,6 +1072,7 @@ export const completeOrder = async (req, res, next) => {
       return next(createError(404, "Admin atau Seller tidak ditemukan"));
     }
 
+    // 💰 Hitung fee & pendapatan
     const adminFee = order.adminFee ?? order.price * 0.12;
     const sellerRevenue = order.price - adminFee;
 
@@ -1011,16 +1083,19 @@ export const completeOrder = async (req, res, next) => {
     // ✅ Update saldo seller
     seller.availableBalance = (seller.availableBalance ?? 0) + sellerRevenue;
 
-    // 🔹 Tambahkan histori penjualan permanen ke user
-    seller.totalSales = (seller.totalSales ?? 0) + 1;
+    // 📈 Update lifetime penjualan seller (tidak akan berkurang)
+    seller.lifetimeSales = (seller.lifetimeSales ?? 0) + 1;
+
+    // 📊 Tambah poin seller
     seller.sellerPoints = (seller.sellerPoints ?? 0) + 9;
+
     await seller.save();
 
-    console.log(`✅ Dana Rp${adminFee} masuk ke saldo Admin`);
-    console.log(`✅ Dana Rp${sellerRevenue} masuk ke saldo Seller`);
-    console.log(`📈 Seller ${seller.username} dapat +1 totalSales & +9 poin`);
+    console.log(`✅ Admin +Rp${adminFee}`);
+    console.log(`✅ Seller ${seller.username} +Rp${sellerRevenue}`);
+    console.log(`📈 lifetimeSales +1, sellerPoints +9`);
 
-    // Tandai order selesai
+    // ✅ Tandai order selesai
     order.status = "completed";
     order.progressStatus = "delivered";
     order.workCompletedAt = new Date();
@@ -1029,22 +1104,25 @@ export const completeOrder = async (req, res, next) => {
     order.released = true;
     await order.save();
 
+    // 🧹 Bersihkan percakapan setelah order selesai
     await deleteConversationsByOrderId(order._id);
-    // 🔹 Cek apakah seller memenuhi syarat naik level
-await checkAndUpdateSellerLevel(order.sellerId);
 
+    // 🔹 Update level seller (jika pakai sistem level)
+    await checkAndUpdateSellerLevel(order.sellerId);
 
-    // (opsional) Tambah penjualan ke gig
+    // 🔹 Tambahkan sales ke gig
     await Gig.findByIdAndUpdate(order.gigId, { $inc: { sales: 1 } });
 
     res.status(200).json({
-      message: "Order berhasil diselesaikan. Dana masuk ke saldo Seller & Admin.",
+      message: "✅ Order berhasil diselesaikan. Dana masuk ke saldo Seller & Admin.",
       updatedOrder: order,
     });
   } catch (err) {
     next(err);
   }
 };
+
+
 
 
 export const reportDispute = async (req, res, next) => {
@@ -1179,17 +1257,38 @@ export const resolveDispute = async (req, res, next) => {
 export const deleteOrderByAdmin = async (req, res, next) => {
   try {
     const { id } = req.params;
+
     if (!mongoose.Types.ObjectId.isValid(id))
       return next(createError(400, "Format Order ID tidak valid"));
 
-    const order = await Order.findByIdAndDelete(id);
+    const order = await Order.findById(id);
     if (!order) return next(createError(404, "Order tidak ditemukan"));
 
-    res.status(200).json({ message: "Order berhasil dihapus oleh admin" });
+    await deleteConversationsByOrderId(order._id);
+
+    // ⚙️ Admin menghapus order tanpa memengaruhi lifetimeSales,
+    // tapi tetap bisa kurangi totalSales aktif jika masih dihitung
+    const seller = await User.findById(order.sellerId);
+    if (seller) {
+      if (seller.totalSales && seller.totalSales > 0) {
+        seller.totalSales = Math.max(0, seller.totalSales - 1);
+      }
+      // ⚠️ lifetimeSales & score tidak disentuh
+      await seller.save();
+    }
+
+    await Order.findByIdAndDelete(id);
+
+    res.status(200).json({
+      message: "Order dihapus oleh admin tanpa memengaruhi lifetime sales.",
+    });
   } catch (err) {
     next(err);
   }
 };
+
+
+
 
 
 export const getPendingReleases = async (req, res, next) => {

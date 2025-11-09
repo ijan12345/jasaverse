@@ -40,6 +40,10 @@ const OrderSchema = new Schema(
       ref: "User",
       index: true,
     },
+    buyerDeleted: { type: Boolean, default: false },
+sellerDeleted: { type: Boolean, default: false },
+
+
     buyerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

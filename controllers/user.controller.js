@@ -62,61 +62,74 @@ export const checkAndUpdateSellerLevel = async (sellerId) => {
 
 export const getSellerLeaderboard = async (req, res) => {
   try {
-    // 1. Ambil semua data mentah yang relevan
-    //    .lean() membuatnya lebih cepat karena hanya mengambil data JSON
+    // 1️⃣ Ambil semua seller aktif
     const users = await User.find({ isSeller: true })
-      .select("_id username img")
+      .select("_id username img lifetimeSales totalSales")
       .lean();
-      
+
+    // 2️⃣ Ambil semua gigs & order relevan
     const gigs = await Gig.find().select("userId").lean();
-    const orders = await Order.find({ status: "completed" })
+
+    // Hanya order completed & belum dihapus kedua pihak
+    const orders = await Order.find({
+      status: "completed",
+      sellerDeleted: false,
+      buyerDeleted: false,
+    })
       .select("sellerId")
       .lean();
 
-    // 2. Ubah data mentah menjadi Peta (Map) untuk pencarian cepat
-    //    Ini jauh lebih cepat daripada query database di dalam loop
-    
-    const gigCounts = {}; // Peta: userId -> jumlah gig
+    // 3️⃣ Buat peta gig dan order untuk akses cepat
+    const gigCounts = {}; // userId -> jumlah gig
     for (const gig of gigs) {
       const userId = gig.userId.toString();
       gigCounts[userId] = (gigCounts[userId] || 0) + 1;
     }
 
-    const orderCounts = {}; // Peta: sellerId -> jumlah order
+    const orderCounts = {}; // sellerId -> jumlah order aktif
     for (const order of orders) {
-      const sellerId = order.sellerId.toString();
+      const sellerId = order.sellerId?.toString();
+      if (!sellerId) continue;
       orderCounts[sellerId] = (orderCounts[sellerId] || 0) + 1;
     }
 
-    // 3. Proses data di memori server
+    // 4️⃣ Proses semua seller di memori
     const processedSellers = users.map((user) => {
       const userId = user._id.toString();
-      
       const totalGigs = gigCounts[userId] || 0;
-      const totalSales = orderCounts[userId] || 0;
-      const score = totalSales * 9 + totalGigs; // Logika skor Anda
+      const totalSales = orderCounts[userId] || 0; // Ini tetap 'totalSales' (penjualan aktif)
+      const lifetimeSales = user.lifetimeSales ?? 0; // Ini 'lifetimeSales'
+
+      // ==========================================================
+      // ✅ PERUBAHAN DI SINI: Menggunakan 'lifetimeSales' untuk skor
+      // ==========================================================
+      const score = lifetimeSales * 9 + totalGigs;
 
       return {
         userId: user._id,
         username: user.username,
         profileImage: user.img || "https://via.placeholder.com/28",
-        totalSales,
+        totalSales,      // Tetap kirim 'totalSales' jika frontend perlu
+        lifetimeSales,   // Kirim 'lifetimeSales'
         totalGigs,
-        score,
+        score,           // Kirim skor baru berbasis lifetime
       };
     });
 
-    // 4. Urutkan, ambil 5 teratas, dan kirim
-    const sortedSellers = processedSellers
+    // 5️⃣ Urutkan dan ambil 5 teratas
+    const topSellers = processedSellers
       .sort((a, b) => b.score - a.score)
-      .slice(0, 5); // Hanya kirim 5 teratas
+      .slice(0, 5);
 
-    res.status(200).json(sortedSellers);
+    // 6️⃣ Kirim hasil ke frontend
+    res.status(200).json(topSellers);
   } catch (err) {
     console.error("Error in getSellerLeaderboard:", err);
     res.status(500).json({ message: "Gagal memuat leaderboard" });
   }
 };
+
+
 export const getSellerLevelInfo = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select(
@@ -179,41 +192,89 @@ export const deleteUser = async (req, res, next) => {
 // 📊 GET /users/faculty-rank
 export const getFacultyRanks = async (req, res) => {
   try {
-    // Ambil semua user yang punya fakultas
-    const users = await User.find({ faculty: { $exists: true, $ne: "" } });
-    const gigs = await Gig.find();
-    const orders = await Order.find({ status: "completed" });
+    // 1️⃣ Ambil semua user yang punya fakultas dan merupakan seller
+    const users = await User.find({
+      isSeller: true,
+      faculty: { $exists: true, $ne: "" },
+    })
+      .select("_id faculty lifetimeSales totalSales")
+      .lean();
 
-    // Map fakultas → total skor kumulatif
-    const facultyScores = {};
+    // 2️⃣ Ambil semua gigs dan order relevan
+    const gigs = await Gig.find().select("userId").lean();
 
-    for (const user of users) {
-      // Semua gig & order dari seller ini
-      const userGigs = gigs.filter((g) => g.userId.toString() === user._id.toString());
-      const userOrders = orders.filter((o) => o.sellerId.toString() === user._id.toString());
+    const orders = await Order.find({
+      status: "completed",
+      sellerDeleted: false,
+      buyerDeleted: false,
+    })
+      .select("sellerId")
+      .lean();
 
-      const totalGigs = userGigs.length;
-      const totalSales = userOrders.length;
-      const score = totalSales * 9 + totalGigs; // 💡 sama persis seperti SellerScoresScreen
-
-      if (!facultyScores[user.faculty]) {
-        facultyScores[user.faculty] = 0;
-      }
-      facultyScores[user.faculty] += score;
+    // 3️⃣ Peta cepat untuk menghitung gig & order
+    const gigCounts = {}; // userId -> jumlah gig
+    for (const gig of gigs) {
+      const userId = gig.userId.toString();
+      gigCounts[userId] = (gigCounts[userId] || 0) + 1;
     }
 
-    // Ubah ke bentuk array dan urutkan
-    const rankedFaculties = Object.entries(facultyScores)
-      .map(([faculty, score]) => ({ faculty, score }))
-      .sort((a, b) => b.score - a.score)
-      .map((item, index) => ({ ...item, rank: index + 1 }));
+    const orderCounts = {}; // sellerId -> jumlah order
+    for (const order of orders) {
+      const sellerId = order.sellerId?.toString();
+      if (!sellerId) continue;
+      orderCounts[sellerId] = (orderCounts[sellerId] || 0) + 1;
+    }
 
+    // 4️⃣ Hitung skor kumulatif tiap fakultas
+    const facultyScores = {}; // fakultas -> total skor
+    const facultyLifetimeSales = {}; // fakultas -> total lifetime sales
+    const facultyActiveSales = {}; // fakultas -> totalSales aktif
+
+    for (const user of users) {
+      const userId = user._id.toString();
+      const totalGigs = gigCounts[userId] || 0;
+      const totalSales = orderCounts[userId] || 0;
+      const lifetimeSales = user.lifetimeSales ?? 0;
+
+      // ==========================================================
+      // ✅ PERUBAHAN DI SINI: Menggunakan 'lifetimeSales' untuk skor
+      // ==========================================================
+      const score = lifetimeSales * 9 + totalGigs;
+
+      // Tambahkan ke fakultas masing-masing
+      if (!facultyScores[user.faculty]) {
+        facultyScores[user.faculty] = 0;
+        facultyLifetimeSales[user.faculty] = 0;
+        facultyActiveSales[user.faculty] = 0;
+      }
+
+      facultyScores[user.faculty] += score;
+      facultyLifetimeSales[user.faculty] += lifetimeSales;
+      facultyActiveSales[user.faculty] += totalSales;
+    }
+
+    // 5️⃣ Ubah ke array dan urutkan berdasarkan skor
+    const rankedFaculties = Object.keys(facultyScores)
+      .map((faculty) => ({
+        faculty,
+        score: facultyScores[faculty], // Skor baru berbasis lifetime
+        totalActiveSales: facultyActiveSales[faculty],
+        totalLifetimeSales: facultyLifetimeSales[faculty],
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map((item, index) => ({
+        ...item,
+        rank: index + 1,
+      }));
+
+    // 6️⃣ Kirim hasil ke frontend
     res.status(200).json(rankedFaculties);
   } catch (err) {
     console.error("Error calculating faculty ranks:", err);
     res.status(500).json({ message: "Error calculating faculty ranks" });
   }
 };
+
 
 
 
@@ -376,6 +437,8 @@ export const getUser = async (req, res) => {
       memberSince: formattedDate,
       availableBalance: user.availableBalance,
       pendingBalance: user.pendingBalance,
+       totalSales: user.totalSales ?? 0,
+      lifetimeSales: user.lifetimeSales ?? 0, // 👈 Tambahan penting
     });
   } catch (err) {
     console.error(err);
@@ -429,25 +492,31 @@ export const getSellerScores = async (req, res) => {
     const gigs = await Gig.find({ userId: id });
     const gigIds = gigs.map((gig) => gig._id);
 
-    // Hitung total penjualan berdasarkan order aktif (untuk tampilan)
-    const calculatedSales = await Order.countDocuments({ gigId: { $in: gigIds } });
+    // Hitung total penjualan aktif berdasarkan order (yang belum dihapus)
+    const calculatedSales = await Order.countDocuments({
+      gigId: { $in: gigIds },
+      sellerDeleted: false,
+      buyerDeleted: false,
+      status: "completed",
+    });
 
     // Hitung jumlah gigs yang dimiliki
     const ownedGigsCount = gigIds.length;
 
-    // Hitung skor seller (untuk leaderboard)
+    // Hitung skor seller (contoh sederhana)
     const score = calculatedSales * 9 + ownedGigsCount * 1;
 
-    // ✅ Simpan hanya score, tanpa ubah totalSales di database
+    // Simpan hanya score — tidak ubah totalSales
     user.score = score;
     await user.save();
 
-    // ✅ Kirim hasil hitung ke frontend tanpa mengubah database totalSales
+    // ✅ Kirim hasil hitung lengkap ke frontend
     res.status(200).json({
       userId: id,
       totalGigs: ownedGigsCount,
-      totalSales: user.totalSales, // tetap gunakan nilai di DB
-      calculatedSales, // tampilkan hasil hitung live
+      totalSales: user.totalSales ?? 0,
+      lifetimeSales: user.lifetimeSales ?? 0, // 🔹 tambahan penting
+      calculatedSales,
       score,
     });
   } catch (err) {
@@ -458,6 +527,7 @@ export const getSellerScores = async (req, res) => {
     });
   }
 };
+
 
 
 export const getBuyerRank = async (req, res, next) => {
@@ -484,12 +554,12 @@ export const getUserRank = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validasi ID
+    // 🔍 Validasi ID user
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "ID user tidak valid" });
     }
 
-    // Ambil user
+    // 🔹 Ambil data user
     const user = await User.findById(id);
     if (!user) {
       return res.status(404).json({ message: "User tidak ditemukan." });
@@ -498,28 +568,30 @@ export const getUserRank = async (req, res) => {
       return res.status(400).json({ message: "User ini bukan seller." });
     }
 
-    // Ambil semua seller
+    // 🔹 Ambil semua seller untuk menghitung peringkat global
     const sellers = await User.find({ isSeller: true });
 
-    // Hitung skor untuk tiap seller
+    // 🔹 Hitung skor dan data untuk masing-masing seller
     const processedSellers = await Promise.all(
       sellers.map(async (seller) => {
         const sellerId = new mongoose.Types.ObjectId(seller._id);
 
         // Ambil semua gigs milik seller
         const gigs = await Gig.find({ userId: sellerId });
-        const gigIds = gigs.map(gig => gig._id);
+        const gigIds = gigs.map((gig) => gig._id);
 
-        // Hitung total sales dengan status completed
+        // Hitung total sales aktif (completed dan belum dihapus kedua pihak)
         const totalSales = await Order.countDocuments({
           gigId: { $in: gigIds },
           status: "completed",
+          sellerDeleted: false,
+          buyerDeleted: false,
         });
 
-        // Hitung jumlah gigs
+        // Hitung jumlah gigs yang dimiliki
         const ownedGigsCount = gigIds.length;
 
-        // Hitung skor
+        // Hitung skor seller (misal 9 poin per penjualan + 1 per gig aktif)
         const score = totalSales * 9 + ownedGigsCount * 1;
 
         return {
@@ -527,38 +599,45 @@ export const getUserRank = async (req, res) => {
           username: seller.username,
           totalGigs: ownedGigsCount,
           totalSales,
+          lifetimeSales: seller.lifetimeSales ?? 0, // ✅ tambahan baru
           score,
         };
       })
     );
 
-    // Urutkan berdasarkan skor tertinggi
+    // 🔹 Urutkan berdasarkan skor tertinggi
     const sortedSellers = processedSellers.sort((a, b) => b.score - a.score);
 
-    // Tambahkan ranking
+    // 🔹 Tambahkan ranking
     const rankedSellers = sortedSellers.map((seller, index) => ({
       ...seller,
       rank: index + 1,
     }));
 
-    // Temukan ranking untuk user yang diminta
-    const userRank = rankedSellers.find(seller => seller._id.toString() === id);
+    // 🔹 Cari peringkat untuk user yang diminta
+    const userRank = rankedSellers.find((seller) => seller._id.toString() === id);
 
     if (!userRank) {
-      return res.status(404).json({ message: "Seller tidak ditemukan dalam daftar peringkat." });
+      return res
+        .status(404)
+        .json({ message: "Seller tidak ditemukan dalam daftar peringkat." });
     }
 
-    // Simpan rank dan score ke database
+    // 🔹 Simpan rank dan score ke database
     user.rank = userRank.rank;
     user.score = userRank.score;
     await user.save();
 
+    // ✅ Kirim hasil lengkap termasuk lifetimeSales
     res.status(200).json(userRank);
   } catch (err) {
     console.error("Error fetching user rank:", err.message);
-    res.status(500).json({ message: "Gagal mengambil peringkat user", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Gagal mengambil peringkat user", error: err.message });
   }
 };
+
 
 // Fungsi untuk mengambil URL gambar CV dan sertifikat
 export const getUserImages = async (req, res) => {
@@ -581,43 +660,85 @@ export const getUserImages = async (req, res) => {
 
 export const getUserProfileFromToken = async (req, res, next) => {
   try {
-    const userId = req.userId; // ambil dari token
+    const userId = req.userId; // dari token
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    res.status(200).json(user);
+    // 🔹 Ambil jumlah gigs milik user (jika seller)
+    const ownedGigs = user.isSeller
+      ? await Gig.countDocuments({ userId })
+      : 0;
+
+    // 🔹 Hitung poin berdasarkan lifetimeSales dan gigs
+    // misal: 1 poin per gig, dan 9 poin per unit lifetimeSales (skala fleksibel)
+    const lifetimeSalesValue = user.lifetimeSales || 0;
+    const recalculatedScore = (lifetimeSalesValue * 9) + ownedGigs;
+
+    // 🔹 Update jika berbeda agar sinkron
+    if (user.score !== recalculatedScore) {
+      user.score = recalculatedScore;
+      await user.save();
+    }
+
+    // 🔹 Kirim data lengkap ke frontend
+    res.status(200).json({
+      ...user._doc,
+      ownedGigs,
+      score: recalculatedScore,
+    });
   } catch (err) {
-    next(err);
+    console.error("❌ Error in getUserProfileFromToken:", err);
+    res.status(500).json({
+      message: "Error fetching user profile from token",
+      error: err.message,
+    });
   }
 };
+
 
 export const getUserProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return next(createError(404, "User not found"));
 
-    // 🔹 Hitung skor jika user adalah seller
+    // 🔹 Hitung skor hanya jika user adalah seller
     if (user.isSeller) {
       const gigs = await Gig.find({ userId: user._id });
-      const gigIds = gigs.map(g => g._id);
-      const totalSales = await Order.countDocuments({ gigId: { $in: gigIds }, status: "completed" });
+      const gigIds = gigs.map((g) => g._id);
+
+      // 🔸 Hitung total sales aktif (completed dan belum dihapus kedua pihak)
+      const totalSales = await Order.countDocuments({
+        gigId: { $in: gigIds },
+        status: "completed",
+        sellerDeleted: false,
+        buyerDeleted: false,
+      });
+
       const ownedGigsCount = gigIds.length;
-      user.score = totalSales * 9 + ownedGigsCount * 1; // logika sama seperti getUserRank
+
+      // 🔸 Hitung score (pakai logika yang sama dengan rank/score endpoint)
+      user.score = totalSales * 9 + ownedGigsCount * 1;
       await user.save();
     }
 
+    // ✅ Kirim data lengkap, termasuk lifetimeSales
     res.status(200).json({
       ...user._doc,
       availableBalance: user.availableBalance,
       pendingBalance: user.pendingBalance,
+      totalSales: user.totalSales ?? 0,
+      lifetimeSales: user.lifetimeSales ?? 0, // 🔹 Tambahan baru
+      score: user.score ?? 0,
     });
   } catch (err) {
+    console.error("Error retrieving user profile:", err);
     res.status(500).json({
       message: "Error retrieving user profile",
       details: err.message,
     });
   }
 };
+
 
 
 export const getUserEscrowBalance = async (req, res, next) => {

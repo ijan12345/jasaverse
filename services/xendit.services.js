@@ -51,8 +51,8 @@ export const requestEwalletPayout = async ({
       channel_code: `ID_${ewallet_type.toUpperCase()}`,
       channel_properties: {
         mobile_number: phone_number,
-        success_redirect_url: "https://api.skillsap.com/api/orders/payment-success",
-        failure_redirect_url: "https://api.skillsap.com/api/orders/payment-failure",
+        success_redirect_url: "https://api.skillsap.xyz/api/orders/payment-success",
+        failure_redirect_url: "https://api.skillsap.xyz/api/orders/payment-failure",
       },
     },
     {
@@ -97,8 +97,8 @@ export const createXenditInvoice = async ({
         mobile_number: customer?.mobile_number || "+6280000000000",
       },
       // ✅ gunakan redirect ke halaman web yang kamu buat
-      success_redirect_url: "https://api.skillsap.com/api/orders/payment-success",
-      failure_redirect_url: "https://api.skillsap.com/api/orders/payment-failure",
+      success_redirect_url: "https://api.skillsap.xyz/api/orders/payment-success",
+      failure_redirect_url: "https://api.skillsap.xyz/api/orders/payment-failure",
       metadata,
     },
     {

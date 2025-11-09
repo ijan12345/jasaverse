@@ -21,6 +21,11 @@ const userSchema = new Schema(
       type: String,
       required: false,
     },
+    totalSales: {
+  type: Number,
+  default: 0, // total jasa terjual saat ini (aktif)
+  min: 0,
+},
     nimImage: { type: String, required: false },
 nimPublicId: { type: String },
 faculty: { type: String, required: false },
@@ -102,6 +107,12 @@ statusBadge: {
     totalSales: {
       type: Number,
       default: 0, // total jasa terjual
+      min: 0,
+    },
+      // 🔹 Lifetime sales — tidak berkurang saat order dihapus
+    lifetimeSales: {
+      type: Number,
+      default: 0, // total seluruh penjualan sepanjang waktu
       min: 0,
     },
     sellerPoints: {

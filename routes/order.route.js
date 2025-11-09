@@ -60,42 +60,75 @@ router.get("/payment-success", (req, res) => {
         <title>Pembayaran Berhasil</title>
         <style>
           body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            height: 100vh;
+            background: linear-gradient(135deg, #1DBF73 0%, #12a15f 100%);
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f9fff9;
-            color: #1DBF73;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
             text-align: center;
           }
-          h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
+
+          .card {
+            background: #fff;
+            color: #333;
+            border-radius: 20px;
+            padding: 40px 50px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            max-width: 400px;
           }
-          p {
-            font-size: 1.2rem;
-            color: #444;
-          }
+
           .icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
+            background-color: #1DBF73;
+            color: white;
+            border-radius: 50%;
+            width: 90px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            margin: 0 auto 20px auto;
+            box-shadow: 0 4px 12px rgba(29,191,115,0.4);
+          }
+
+          h1 {
+            margin: 10px 0;
+            font-size: 2rem;
+            color: #1DBF73;
+          }
+
+          p {
+            color: #666;
+            font-size: 1rem;
+          }
+
+          .footer {
+            margin-top: 25px;
+            font-size: 0.9rem;
+            color: #999;
           }
         </style>
       </head>
       <body>
-        <div class="icon">✅</div>
-        <h1>Pembayaran Berhasil</h1>
-        <p>Anda dapat kembali ke aplikasi SkillSap.</p>
+        <div class="card">
+          <div class="icon">✅</div>
+          <h1>Pembayaran Berhasil!</h1>
+          <p>Terima kasih, transaksi Anda telah dikonfirmasi.</p>
+          <p>Anda akan diarahkan kembali ke aplikasi SkillSap...</p>
+          <div class="footer">SkillSap © 2025</div>
+        </div>
+
         <script>
-          setTimeout(() => window.location.href = "skillsap://orders", 1500);
+          setTimeout(() => window.location.href = "skillsap://orders", 2000);
         </script>
       </body>
     </html>
   `);
 });
+
 
 router.get("/payment-failure", (req, res) => {
   res.send(`
@@ -107,42 +140,74 @@ router.get("/payment-failure", (req, res) => {
         <title>Pembayaran Gagal</title>
         <style>
           body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            height: 100vh;
+            background: linear-gradient(135deg, #F24444 0%, #C0392B 100%);
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #fff8f8;
-            color: #C0392B;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
             text-align: center;
           }
-          h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
+
+          .card {
+            background: #fff;
+            color: #333;
+            border-radius: 20px;
+            padding: 40px 50px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            max-width: 400px;
           }
-          p {
-            font-size: 1.2rem;
-            color: #444;
-          }
+
           .icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
+            background-color: #C0392B;
+            color: white;
+            border-radius: 50%;
+            width: 90px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            margin: 0 auto 20px auto;
+            box-shadow: 0 4px 12px rgba(192,57,43,0.4);
+          }
+
+          h1 {
+            margin: 10px 0;
+            font-size: 2rem;
+            color: #C0392B;
+          }
+
+          p {
+            color: #666;
+            font-size: 1rem;
+          }
+
+          .footer {
+            margin-top: 25px;
+            font-size: 0.9rem;
+            color: #999;
           }
         </style>
       </head>
       <body>
-        <div class="icon">❌</div>
-        <h1>Pembayaran Gagal</h1>
-        <p>Silakan kembali ke aplikasi SkillSap dan coba lagi.</p>
+        <div class="card">
+          <div class="icon">❌</div>
+          <h1>Pembayaran Gagal!</h1>
+          <p>Silakan kembali ke aplikasi SkillSap dan coba lagi.</p>
+          <div class="footer">SkillSap © 2025</div>
+        </div>
+
         <script>
-          setTimeout(() => window.location.href = "skillsap://orders", 1500);
+          setTimeout(() => window.location.href = "skillsap://orders", 2000);
         </script>
       </body>
     </html>
   `);
 });
+
 
 // 📌 ORDER DAN EXTRA
 router.get("/", verifyToken, getOrders);
