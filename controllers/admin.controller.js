@@ -15,6 +15,55 @@ cloudinary.config({
   api_secret: process.env.CLOUD_API_SECRET,
 });
 
+export const getAdminFee = async (req, res, next) => {
+  try {
+    const orders = await Order.find();
+    const totalAdminFee = orders.reduce((acc, order) => {
+      const fee = order.adminFee ?? order.price * 0.12;
+      return acc + fee;
+    }, 0);
+
+    res.status(200).json({ totalAdminFee });
+  } catch (err) {
+    next(err);
+  }
+};
+export const getOrderOverviewStats = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const orders = await Order.find({
+      createdAt: { $gte: monthStart, $lt: monthEnd }
+    });
+
+    const pending = orders.filter(o => o.status === "pending").length;
+    const canceled = orders.filter(o => o.status === "canceled").length;
+    const completed = orders.filter(o => o.status === "completed").length;
+
+    // ✅ ADMIN FEE HANYA DARI ORDER COMPLETED
+    const totalAdminFee = orders
+      .filter(o => o.status === "completed")
+      .reduce((sum, order) => {
+        const fee = order.adminFee ?? order.price * 0.12;
+        return sum + fee;
+      }, 0);
+
+    res.status(200).json({
+      month: now.toLocaleString("id-ID", { month: "long", year: "numeric" }),
+      pending,
+      canceled,
+      completed,
+      totalAdminFee,
+      updatedAt: new Date(),
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
 
 // =============================
 // 1️⃣ Admin Dashboard (Ringkasan Data)

@@ -9,7 +9,7 @@ router.post("/redeem", verifyToken, redeemReward);
 // 🔹 Admin only routes
 router.get("/my-redemptions", verifyToken, getUserRedemptions);
 router.get("/admin/pending", verifyToken, verifyAdmin, getPendingRewards);
-router.patch("/admin/:id/approve", verifyToken, verifyAdmin, approveReward);
-router.patch("/admin/:id/reject", verifyToken, verifyAdmin, rejectReward);
+router.put("/admin/:id/approve", verifyToken, verifyAdmin, approveReward);
+router.put("/admin/:id/reject", verifyToken, verifyAdmin, rejectReward);
 
 export default router;

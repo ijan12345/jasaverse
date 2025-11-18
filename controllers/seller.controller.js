@@ -5,70 +5,105 @@ import Order from "../models/order.model.js";
 
 export const getSellerScores = async (req, res) => {
   try {
-    const sellers = await User.find({ isSeller: true });
+    const top10 = await User.aggregate([
+      // Ambil seller saja
+      { $match: { isSeller: true } },
 
-    if (!sellers.length) {
-      return res.status(200).json([]);
-    }
+      // Ambil gigs milik seller
+      {
+        $lookup: {
+          from: "gigs",
+          localField: "_id",
+          foreignField: "userId",
+          as: "gigs"
+        }
+      },
 
-    const processedSellers = await Promise.all(
-      sellers.map(async (seller) => {
-        const sellerId = new mongoose.Types.ObjectId(seller._id);
+      // Hitung jumlah gigs
+      {
+        $addFields: {
+          totalGigs: { $size: "$gigs" }
+        }
+      },
 
-        // Ambil gigs aktif
-        const gigs = await Gig.find({ userId: sellerId });
-        const gigIds = gigs.map((gig) => gig._id);
+      // Ambil order completed untuk gig milik seller
+      {
+        $lookup: {
+          from: "orders",
+          let: { gigIds: "$gigs._id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $in: ["$gigId", "$$gigIds"] },
+                    { $eq: ["$status", "completed"] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: "completedOrders"
+        }
+      },
 
-        // Hitung sales aktif (live)
-        const calculatedSales = await Order.countDocuments({
-          gigId: { $in: gigIds },
-          status: "completed",
-        });
+      // Hitung calculatedSales (order aktif)
+      {
+        $addFields: {
+          calculatedSales: { $size: "$completedOrders" }
+        }
+      },
 
-        // ==========================================================
-        // ✅ PERUBAHAN 1: Ambil 'lifetimeSales' dari DB
-        // (Mengganti 'seller.totalSales' menjadi 'seller.lifetimeSales'
-        // agar konsisten dengan fungsi leaderboard Anda sebelumnya)
-        // ==========================================================
-        const lifetimeSales = seller.lifetimeSales ?? 0;
+      // Tambah lifetimeSales default 0
+      {
+        $addFields: {
+          lifetimeSales: { $ifNull: ["$lifetimeSales", 0] }
+        }
+      },
 
-        // Hitung jumlah gigs yang dimiliki
-        const ownedGigsCount = gigIds.length;
+      // Hitung skor: lifetimeSales * 9 + totalGigs
+      {
+        $addFields: {
+          score: {
+            $add: [
+              { $multiply: ["$lifetimeSales", 9] },
+              "$totalGigs"
+            ]
+          }
+        }
+      },
 
-        // ==========================================================
-        // ✅ PERUBAHAN 2: Hitung skor pakai 'lifetimeSales'
-        // ==========================================================
-        const score = lifetimeSales * 9 + ownedGigsCount;
+      // Urutkan dari skor tertinggi
+      { $sort: { score: -1 } },
 
-        return {
-          _id: seller._id,
-          userId: seller._id,
-          username: seller.username,
-          profileImage: seller.img || "/img/default-profile.png",
-          totalGigs: ownedGigsCount,
-          totalSales: lifetimeSales, // Kirim 'lifetimeSales' sebagai 'totalSales'
-          lifetimeSales: lifetimeSales, // Kirim juga agar jelas (opsional)
-          calculatedSales, // tetap kirim sales aktif jika perlu
-          score,           // Skor baru berbasis lifetime
-        };
-      })
-    );
+      // ✅ Batasi hanya 10 orang
+      { $limit: 10 },
 
-    // Urutkan berdasarkan score
-    const sortedSellers = processedSellers.sort((a, b) => b.score - a.score);
+      // Format output
+      {
+        $project: {
+          userId: "$_id",
+          username: 1,
+          profileImage: "$img",
+          totalGigs: 1,
+          lifetimeSales: 1,
+          calculatedSales: 1,
+          score: 1
+        }
+      }
+    ]);
 
-    // Tambahkan rank
-    const rankedSellers = sortedSellers.map((seller, index) => ({
+    // Tambahkan rank manual (1–10)
+    const ranked = top10.map((seller, index) => ({
       ...seller,
       rank: index + 1,
     }));
 
-    res.status(200).json(rankedSellers);
+    res.status(200).json(ranked);
   } catch (err) {
-    console.error("Error fetching seller scores:", err.message);
-    res.status(500).json({
-      message: "Gagal mengambil skor penjual",
-      error: err.message,
-    });
+    console.error("Error leaderboard:", err);
+    res
+      .status(500)
+      .json({ message: "Gagal mengambil leaderboard", error: err.message });
   }
 };
